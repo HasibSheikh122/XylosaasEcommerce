@@ -1,0 +1,47 @@
+# Django Core & Ecosystem
+Django==4.2.0
+djangorestframework==3.14.0
+django-cors-headers==3.14.0
+django-tenant-schemas==1.11.0
+django-tenants==3.5.0
+psycopg2-binary==2.9.6
+celery==5.2.7
+redis==4.5.4
+django-redis==5.2.0
+django-celery-beat==2.5.0
+
+# AI/ML
+scikit-learn==1.2.2
+tensorflow==2.12.0
+numpy==1.23.5
+pandas==2.0.1
+prophet==1.1.5
+transformers==4.28.1
+torch==2.0.1
+pillow==9.5.0
+
+# Authentication
+djangorestframework-simplejwt==5.2.2
+django-allauth==0.54.0
+
+# Payment
+stripe==5.2.0
+paypalrestsdk==1.13.1
+
+# Storage
+boto3==1.26.106
+
+# Documentation
+drf-yasg==1.21.7
+
+# Testing
+pytest==7.3.0
+pytest-django==4.5.2
+pytest-cov==4.0.0
+factory-boy==3.2.1
+
+# Utilities
+python-dotenv==1.0.0
+django-environ==0.10.0
+django-filter==23.1
+drf-extensions==0.7.1
