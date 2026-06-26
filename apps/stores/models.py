@@ -273,7 +273,7 @@ class StorePage(models.Model):
     def save(self, *args, **kwargs):
         from django.utils.text import slugify # ইমপোর্টটি এখানে বা ফাইলের একদম উপরে দিতে পারেন
         if not self.slug:
-            self.slug = slugify(self.name) # নামের ওপর ভিত্তি করে স্লাগ বানাবে
+            self.slug = slugify(self.title) # শিরোনামের ওপর ভিত্তি করে স্লাগ বানাবে
         super().save(*args, **kwargs)
 
 class StoreNotification(models.Model):

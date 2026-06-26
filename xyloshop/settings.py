@@ -81,8 +81,10 @@ TENANT_APPS = [
 INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
 
 MIDDLEWARE = [
+    'django_tenants.middleware.main.TenantMainMiddleware', # ১ নম্বর
     'django_tenants.middleware.TenantMainMiddleware', # 👈 এটি সবার উপরেই থাকবে
     'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware', # ২ নম্বর
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware', # 👈 CORS মিডলওয়্যারটি এখানে যোগ করা সেফ
     'django.middleware.common.CommonMiddleware',
@@ -101,8 +103,6 @@ PUBLIC_SCHEMA_URLCONF = 'xyloshop.urls'
 # প্রতিটি টেন্যান্টের মিডিয়া ফাইল আলাদা ফোল্ডারে রাখার জন্য
 MULTITENANT_RELATIVE_MEDIA_ROOT = True 
 
-# সাবডোমেনগুলোর মধ্যে কুকি শেয়ারিং পারফেক্ট রাখার জন্য
-SESSION_COOKIE_DOMAIN = '.localhost'
 
 TEMPLATES = [
     {
@@ -135,6 +135,11 @@ DATABASES = {
         'PORT': '5432',                # PostgreSQL এর ডিফল্ট পোর্ট সাধারণত 5432 হয়
     }
 }
+
+# settings.py এর AUTHENTICATION_BACKENDS অংশটি এভাবে লিখুন
+AUTHENTICATION_BACKENDS = (
+    'django.contrib.auth.backends.ModelBackend',
+)
 
 DATABASE_ROUTERS = (
     'django_tenants.routers.TenantSyncRouter',
@@ -195,6 +200,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        # 'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -228,9 +234,13 @@ SECURE_SSL_REDIRECT = False  # Development mode, set to True in production
 SESSION_COOKIE_SECURE = False  # Development mode, set to True in production
 CSRF_COOKIE_SECURE = False  # Development mode, set to True in production
 
+# সেশন কুকি ডোমেইন এবং সিকিউরিটি ঠিক করুন
+SESSION_COOKIE_DOMAIN = None # লোকালহস্টের জন্য None বা '.localhost' রাখুন
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
 
-# Celery Configuration
+
+# Celery ConfigurationDATABASE_ROUTERS
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379')
 CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'redis://localhost:6379')
 CELERY_ACCEPT_CONTENT = ['json']
