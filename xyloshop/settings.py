@@ -26,13 +26,17 @@ SECRET_KEY = 'django-insecure--x8szdi6j!=n!u0+g&(#5qr(i2o-!jwdwhdx9vz#%h@unv&j4e
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.localhost']
 
+# ==============================================================================
+# APPLICATION DEFINITION (django-tenants Configuration)
+# ==============================================================================
 
-# Application definition
+SHARED_APPS = [
+    'django_tenants',  # এটি অবশ্যই সবার উপরে থাকবে
+    'apps.tenants',    # টেন্যান্ট ম্যানেজমেন্ট অ্যাপ
+    'jazzmin',
 
-INSTALLED_APPS = [
-    # 'django_tenants',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -48,12 +52,20 @@ INSTALLED_APPS = [
     'drf_yasg',
     'celery',
     'django_celery_beat',
+    
+    'apps.subscriptions', # গ্লোবাল সাবস্ক্রিপশন প্ল্যান
+]
 
-    # Local apps
-    'apps.tenants',
-    'apps.users',
-    'apps.subscriptions',
-    'apps.stores',
+TENANT_APPS = [
+    'django.contrib.contenttypes',  # এটি এখানেও থাকা বাধ্যতামূলক
+    'django.contrib.auth',          # টেন্যান্টের নিজস্ব অথেনটিকেশন
+    'django.contrib.sessions',
+
+    # 📁 প্রতিটি স্টোরের কাস্টমার/ইউজার আইসোলেশন নিশ্চিত করতে এটি এখানে আনা হলো
+    'apps.users',        
+    
+    # আপনার ইকমার্সের মূল ফিচার এবং বিজনেস লজিক অ্যাপস
+    'apps.stores',       
     'apps.products',
     'apps.orders',
     'apps.inventory',
@@ -66,9 +78,13 @@ INSTALLED_APPS = [
     'apps.reviews',
 ]
 
+INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
+
 MIDDLEWARE = [
+    'django_tenants.middleware.TenantMainMiddleware', # 👈 এটি সবার উপরেই থাকবে
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware', # 👈 CORS মিডলওয়্যারটি এখানে যোগ করা সেফ
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -77,6 +93,16 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'xyloshop.urls'
+PUBLIC_SCHEMA_URLCONF = 'xyloshop.urls'
+
+# ==============================================================================
+# MULTI-TENANT EXTRA SETTINGS (মিসিং অংশ)
+# ==============================================================================
+# প্রতিটি টেন্যান্টের মিডিয়া ফাইল আলাদা ফোল্ডারে রাখার জন্য
+MULTITENANT_RELATIVE_MEDIA_ROOT = True 
+
+# সাবডোমেনগুলোর মধ্যে কুকি শেয়ারিং পারফেক্ট রাখার জন্য
+SESSION_COOKIE_DOMAIN = '.localhost'
 
 TEMPLATES = [
     {
@@ -101,11 +127,21 @@ WSGI_APPLICATION = 'xyloshop.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django_tenants.postgresql_backend',
+        'NAME': 'xylosaas_ecommerce', # আপনার ডাটাবেসের নাম
+        'USER': 'postgres',            # সাধারণত ডিফল্ট ইউজার postgres থাকে
+        'PASSWORD': '123321',   # PostgreSQL ইনস্টল করার সময় যে পাসওয়ার্ড দিয়েছিলেন
+        'HOST': 'localhost',           # যেহেতু নিজের কম্পিউটারে চালাচ্ছেন
+        'PORT': '5432',                # PostgreSQL এর ডিফল্ট পোর্ট সাধারণত 5432 হয়
     }
 }
 
+DATABASE_ROUTERS = (
+    'django_tenants.routers.TenantSyncRouter',
+)
+TENANT_MODEL = 'tenants.Tenant'
+TENANT_DOMAIN_MODEL = 'tenants.Domain'
+AUTH_USER_MODEL = 'users.User'
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -167,9 +203,10 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
     ],
-    'DEFAULT_THROTTLE_RATES': {
+   'DEFAULT_THROTTLE_RATES': {
         'anon': '100/day',
         'user': '1000/day',
+        'tenant_creation': '3/day', # 👈 একজন ইউজার দিনে সর্বোচ্চ ৩টি স্টোর ক্রিয়েট করার রিকোয়েস্ট পাঠাতে পারবে
     },
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
@@ -187,9 +224,9 @@ SIMPLE_JWT = {
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
-SECURE_SSL_REDIRECT = True
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
+SECURE_SSL_REDIRECT = False  # Development mode, set to True in production
+SESSION_COOKIE_SECURE = False  # Development mode, set to True in production
+CSRF_COOKIE_SECURE = False  # Development mode, set to True in production
 
 
 
@@ -226,3 +263,50 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:8000",
 ]
+
+
+JAZZMIN_SETTINGS = {
+    "site_title": "Xylosaas Admin",
+    "site_header": "Xylosaas",
+    "site_brand": "Xylosaas Dashboard",
+    "login_logo": None,  # চাইলে এখানে লোগোর পাথ দিতে পারেন
+    "site_logo_classes": "img-circle",
+    
+    
+    # মেনু সেটিংস
+    "navigation_expanded": True,
+    "order_with_respect_to": ["auth", "tenants", "users"],
+    
+    # আইকন সেটিংস (মডেলের জন্য সুন্দর আইকন)
+    "icons": {
+        "auth": "fas fa-users-cog",
+        "auth.user": "fas fa-user",
+        "auth.Group": "fas fa-users",
+    },
+    "custom_css": "css/custom_admin.css",
+    "custom_js": "js/custom_admin.js",
+}
+
+JAZZMIN_UI_TWEAKS = {
+    "navbar_small_text": False,
+    "footer_small_text": False,
+    "body_small_text": False,
+    "brand_small_text": False,
+    "brand_colour": "navbar-navy",
+    "accent": "accent-navy",
+    "navbar": "navbar-navy navbar-dark",
+    "no_navbar_border": True,
+    "navbar_fixed": True,
+    "layout_boxed": False,
+    "footer_fixed": False,
+    "sidebar_fixed": True,
+    "sidebar": "sidebar-dark-navy",
+    "sidebar_nav_small_text": False,
+    "sidebar_disable_expand": False,
+    "sidebar_nav_child_indent": True,
+    "sidebar_nav_compact_style": True,  # একটু কমপ্যাক্ট লুক
+    "sidebar_nav_legacy_style": False,
+    "sidebar_nav_flat_style": True,
+    "theme": "cyborg", # ডার্ক থিমের জন্য বেস্ট
+    "dark_mode_theme": "cyborg",
+}

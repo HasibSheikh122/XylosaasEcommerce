@@ -1,0 +1,20 @@
+/* ব্যাকগ্রাউন্ড ভিডিওর জন্য কন্টেইনার */
+body {
+    position: relative;
+    background: transparent !important;
+}
+
+#bg-video {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    min-width: 100%;
+    min-height: 100%;
+    z-index: -1; /* কন্টেন্টের নিচে রাখার জন্য */
+    object-fit: cover;
+}
+
+/* অ্যাডমিন ড্যাশবোর্ডের কন্টেন্টগুলো স্বচ্ছ করার জন্য যাতে ভিডিও দেখা যায় */
+.content-wrapper {
+    background: rgba(255, 255, 255, 0.7) !important; /* হালকা সাদা ট্রান্সপারেন্ট ব্যাকগ্রাউন্ড */
+}
