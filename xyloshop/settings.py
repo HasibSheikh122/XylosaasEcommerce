@@ -26,16 +26,17 @@ SECRET_KEY = 'django-insecure--x8szdi6j!=n!u0+g&(#5qr(i2o-!jwdwhdx9vz#%h@unv&j4e
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.localhost']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'xyzstore.localhost', '.xyzstore.localhost']
 
 # ==============================================================================
 # APPLICATION DEFINITION (django-tenants Configuration)
 # ==============================================================================
 
 SHARED_APPS = [
+    'jazzmin',
     'django_tenants',  # এটি অবশ্যই সবার উপরে থাকবে
     'apps.tenants',    # টেন্যান্ট ম্যানেজমেন্ট অ্যাপ
-    'jazzmin',
+    
 
     'django.contrib.admin',
     'django.contrib.auth',
@@ -82,11 +83,9 @@ INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in S
 
 MIDDLEWARE = [
     'django_tenants.middleware.main.TenantMainMiddleware', # ১ নম্বর
-    'django_tenants.middleware.TenantMainMiddleware', # 👈 এটি সবার উপরেই থাকবে
     'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware', # ২ নম্বর
-    'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware', # 👈 CORS মিডলওয়্যারটি এখানে যোগ করা সেফ
+    'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -136,7 +135,7 @@ DATABASES = {
     }
 }
 
-# settings.py এর AUTHENTICATION_BACKENDS অংশটি এভাবে লিখুন
+# settings.py
 AUTHENTICATION_BACKENDS = (
     'django.contrib.auth.backends.ModelBackend',
 )
@@ -200,7 +199,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-        # 'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -235,7 +234,7 @@ SESSION_COOKIE_SECURE = False  # Development mode, set to True in production
 CSRF_COOKIE_SECURE = False  # Development mode, set to True in production
 
 # সেশন কুকি ডোমেইন এবং সিকিউরিটি ঠিক করুন
-SESSION_COOKIE_DOMAIN = None # লোকালহস্টের জন্য None বা '.localhost' রাখুন
+SESSION_COOKIE_DOMAIN = None
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
 
@@ -268,13 +267,6 @@ EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@shophive.com')
 
-# CORS
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:8000",
-]
-
-
 JAZZMIN_SETTINGS = {
     "site_title": "Xylosaas Admin",
     "site_header": "Xylosaas",
@@ -295,28 +287,32 @@ JAZZMIN_SETTINGS = {
     },
     "custom_css": "css/custom_admin.css",
     "custom_js": "js/custom_admin.js",
+
 }
 
-JAZZMIN_UI_TWEAKS = {
-    "navbar_small_text": False,
-    "footer_small_text": False,
-    "body_small_text": False,
-    "brand_small_text": False,
-    "brand_colour": "navbar-navy",
-    "accent": "accent-navy",
-    "navbar": "navbar-navy navbar-dark",
-    "no_navbar_border": True,
-    "navbar_fixed": True,
-    "layout_boxed": False,
-    "footer_fixed": False,
-    "sidebar_fixed": True,
-    "sidebar": "sidebar-dark-navy",
-    "sidebar_nav_small_text": False,
-    "sidebar_disable_expand": False,
-    "sidebar_nav_child_indent": True,
-    "sidebar_nav_compact_style": True,  # একটু কমপ্যাক্ট লুক
-    "sidebar_nav_legacy_style": False,
-    "sidebar_nav_flat_style": True,
-    "theme": "cyborg", # ডার্ক থিমের জন্য বেস্ট
-    "dark_mode_theme": "cyborg",
-}
+# settings.py
+
+# এটি অবশ্যই 'True' হতে হবে
+CORS_ALLOW_CREDENTIALS = True 
+
+# ওয়াইল্ডকার্ড ('*') ব্যবহার করবেন না, বরং নির্দিষ্ট ডোমেইন দিন
+
+
+# অথবা আপনার রেজেক্স সেটিংসটি এমন হওয়া উচিত:
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^http://.*\.localhost:3000$",
+]
+
+# নিচে এগুলোও যোগ করুন যেন Preflight রিকোয়েস্ট (OPTIONS) কাজ করে
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "authorization",
+    "content-type",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+    "x-tenant-id", # আপনার টেন্যান্ট হেডার
+]
+
+
+

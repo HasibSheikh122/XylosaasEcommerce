@@ -47,10 +47,10 @@ class Product(models.Model):
     # Attributes
     weight = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     dimensions = models.JSONField(null=True, blank=True)  # {length, width, height}
-    variants = models.JSONField(default=list)  # {size, color, material}
+    variants = models.JSONField(default=list, null=True, blank=True)  # {size, color, material}
     
     # Media
-    images = models.JSONField(default=list)  # List of image URLs
+    images = models.JSONField(default=list, null=True, blank=True)  # List of image URLs
     video_url = models.URLField(null=True, blank=True)
     
     # SEO

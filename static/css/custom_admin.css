@@ -1,20 +1,439 @@
-/* ব্যাকগ্রাউন্ড ভিডিওর জন্য কন্টেইনার */
-body {
-    position: relative;
-    background: transparent !important;
+/* ============================================
+   DASHBOARD - UNIQUE SHAPES & DESIGNS
+   ============================================ */
+
+/* ============================================
+   ROOT VARIABLES - MODERN COLOR SCHEME
+   ============================================ */
+
+:root {
+    --primary: #0d9488;
+    --primary-dark: #0f766e;
+    --primary-light: #2dd4bf;
+    --primary-gradient: linear-gradient(135deg, #0d9488, #06b6d4, #0e7490);
+    --secondary: #64748b;
+    --success: #22c55e;
+    --warning: #eab308;
+    --danger: #ef4444;
+    --info: #3b82f6;
+    --bg-light: #f0fdf4;
+    --bg-dark: #0f172a;
+    --card-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+    --card-shadow-hover: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+    --border-radius: 16px;
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-#bg-video {
-    position: fixed;
-    right: 0;
-    bottom: 0;
-    min-width: 100%;
-    min-height: 100%;
-    z-index: -1; /* কন্টেন্টের নিচে রাখার জন্য */
-    object-fit: cover;
+/* ============================================
+   1. CIRCLE SHAPE CARDS (বৃত্তাকার)
+   ============================================ */
+
+/* ড্যাশবোর্ডের অ্যাপ কার্ডগুলোকে বৃত্তাকার করা */
+.dashboard .app-list .app .card,
+.dashboard .dashboard-apps .app .card {
+    border-radius: 50% !important;
+    width: 200px !important;
+    height: 200px !important;
+    margin: 0 auto !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+    overflow: hidden !important;
+    border: 3px solid rgba(13,148,136,0.15) !important;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.08) !important;
+    background: linear-gradient(135deg, #ffffff, #f0fdf4) !important;
+    position: relative !important;
 }
 
-/* অ্যাডমিন ড্যাশবোর্ডের কন্টেন্টগুলো স্বচ্ছ করার জন্য যাতে ভিডিও দেখা যায় */
-.content-wrapper {
-    background: rgba(255, 255, 255, 0.7) !important; /* হালকা সাদা ট্রান্সপারেন্ট ব্যাকগ্রাউন্ড */
+/* হোভার করলে বড় হবে */
+.dashboard .app-list .app .card:hover,
+.dashboard .dashboard-apps .app .card:hover {
+    transform: scale(1.1) rotate(5deg) !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 15px 50px rgba(13,148,136,0.2) !important;
+}
+
+/* কার্ডের ভেতরের কন্টেন্ট সেন্টার */
+.dashboard .app-list .app .card .card-body,
+.dashboard .dashboard-apps .app .card .card-body {
+    padding: 1rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    height: 100% !important;
+}
+
+/* আইকন বড় করা */
+.dashboard .app-list .app .card .card-body .app-icon,
+.dashboard .dashboard-apps .app .card .card-body .app-icon {
+    font-size: 3rem !important;
+    color: var(--primary) !important;
+    margin-bottom: 8px !important;
+    animation: iconFloat 3s ease-in-out infinite !important;
+}
+
+@keyframes iconFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+}
+
+/* নাম স্টাইল */
+.dashboard .app-list .app .card .card-body .app-name,
+.dashboard .dashboard-apps .app .card .card-body .app-name {
+    font-weight: 700 !important;
+    font-size: 0.85rem !important;
+    color: #0f172a !important;
+}
+
+/* ============================================
+   2. OVAL SHAPE CARDS (ডিম্বাকার)
+   ============================================ */
+
+.oval-card .card {
+    border-radius: 50% / 30% !important;
+    width: 220px !important;
+    height: 140px !important;
+    margin: 0 auto !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+    border: 2px solid rgba(13,148,136,0.12) !important;
+    background: linear-gradient(135deg, #ffffff, #f0fdf4) !important;
+}
+
+.oval-card .card:hover {
+    transform: scale(1.08) !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 15px 40px rgba(13,148,136,0.15) !important;
+}
+
+/* ============================================
+   3. HEXAGON SHAPE CARDS (ষড়ভুজ)
+   ============================================ */
+
+.hexagon-card .card {
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%) !important;
+    border-radius: 0 !important;
+    width: 200px !important;
+    height: 200px !important;
+    margin: 0 auto !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+    background: linear-gradient(135deg, #ffffff, #f0fdf4) !important;
+    border: none !important;
+}
+
+.hexagon-card .card:hover {
+    transform: scale(1.1) !important;
+    box-shadow: 0 15px 50px rgba(13,148,136,0.2) !important;
+}
+
+/* ============================================
+   4. STAR SHAPE CARDS (তারা)
+   ============================================ */
+
+.star-card .card {
+    clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%) !important;
+    border-radius: 0 !important;
+    width: 200px !important;
+    height: 200px !important;
+    margin: 0 auto !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+    background: linear-gradient(135deg, #ffffff, #f0fdf4) !important;
+}
+
+.star-card .card:hover {
+    transform: scale(1.1) rotate(10deg) !important;
+    box-shadow: 0 15px 50px rgba(13,148,136,0.2) !important;
+}
+
+/* ============================================
+   5. DIAMOND SHAPE CARDS (হীরক)
+   ============================================ */
+
+.diamond-card .card {
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%) !important;
+    border-radius: 0 !important;
+    width: 180px !important;
+    height: 180px !important;
+    margin: 0 auto !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+    background: linear-gradient(135deg, #ffffff, #f0fdf4) !important;
+}
+
+.diamond-card .card:hover {
+    transform: scale(1.1) rotate(180deg) !important;
+    box-shadow: 0 15px 50px rgba(13,148,136,0.2) !important;
+}
+
+/* ============================================
+   6. PILL SHAPE CARDS (বড়ি আকৃতি)
+   ============================================ */
+
+.pill-card .card {
+    border-radius: 50px !important;
+    width: 240px !important;
+    height: 80px !important;
+    margin: 0 auto !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+    border: 2px solid rgba(13,148,136,0.12) !important;
+    background: linear-gradient(135deg, #ffffff, #f0fdf4) !important;
+}
+
+.pill-card .card:hover {
+    transform: scale(1.05) !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 15px 40px rgba(13,148,136,0.15) !important;
+}
+
+/* ============================================
+   7. SQUARE WITH ROUNDED CORNERS
+   ============================================ */
+
+.square-rounded .card {
+    border-radius: 20px !important;
+    width: 180px !important;
+    height: 180px !important;
+    margin: 0 auto !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+    border: 2px solid rgba(13,148,136,0.12) !important;
+    background: linear-gradient(135deg, #ffffff, #f0fdf4) !important;
+}
+
+.square-rounded .card:hover {
+    transform: scale(1.08) !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 15px 40px rgba(13,148,136,0.15) !important;
+}
+
+/* ============================================
+   8. FLOATING CARDS (ভাসমান)
+   ============================================ */
+
+.floating-card .card {
+    border-radius: 20px !important;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+    border: 2px solid rgba(13,148,136,0.12) !important;
+    background: linear-gradient(135deg, #ffffff, #f0fdf4) !important;
+    animation: floatY 4s ease-in-out infinite !important;
+}
+
+.floating-card .card:hover {
+    transform: scale(1.05) !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 20px 50px rgba(13,148,136,0.2) !important;
+}
+
+.floating-card:nth-child(2) .card { animation-delay: 0.5s !important; }
+.floating-card:nth-child(3) .card { animation-delay: 1s !important; }
+.floating-card:nth-child(4) .card { animation-delay: 1.5s !important; }
+
+@keyframes floatY {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+/* ============================================
+   9. WAVE CARDS (ঢেউ আকৃতি)
+   ============================================ */
+
+.wave-card .card {
+    border-radius: 30% 70% 70% 30% / 30% 30% 70% 70% !important;
+    width: 200px !important;
+    height: 200px !important;
+    margin: 0 auto !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+    border: 2px solid rgba(13,148,136,0.12) !important;
+    background: linear-gradient(135deg, #ffffff, #f0fdf4) !important;
+}
+
+.wave-card .card:hover {
+    border-radius: 70% 30% 30% 70% / 70% 70% 30% 30% !important;
+    transform: scale(1.08) !important;
+    border-color: var(--primary) !important;
+    box-shadow: 0 15px 40px rgba(13,148,136,0.15) !important;
+}
+
+/* ============================================
+   10. GLASSMORPHISM CARDS (কাচের মত)
+   ============================================ */
+
+.glass-card .card {
+    background: rgba(255,255,255,0.15) !important;
+    backdrop-filter: blur(20px) !important;
+    -webkit-backdrop-filter: blur(20px) !important;
+    border: 1px solid rgba(255,255,255,0.2) !important;
+    border-radius: 20px !important;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1) !important;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+.glass-card .card:hover {
+    background: rgba(255,255,255,0.25) !important;
+    transform: scale(1.05) !important;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.15) !important;
+}
+
+/* ============================================
+   11. 3D TILT CARDS
+   ============================================ */
+
+.tilt-card .card {
+    border-radius: 20px !important;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+    border: 2px solid rgba(13,148,136,0.12) !important;
+    background: linear-gradient(135deg, #ffffff, #f0fdf4) !important;
+}
+
+.tilt-card .card:hover {
+    transform: perspective(1000px) rotateX(5deg) rotateY(10deg) translateZ(20px) !important;
+    box-shadow: 0 30px 60px rgba(13,148,136,0.2) !important;
+    border-color: var(--primary) !important;
+}
+
+/* ============================================
+   STATS CARDS - CIRCLE SHAPE
+   ============================================ */
+
+/* স্ট্যাটস কার্ডগুলোকে বৃত্তাকার */
+.small-box {
+    border-radius: 50% !important;
+    width: 160px !important;
+    height: 160px !important;
+    margin: 0 auto 1.5rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+    overflow: hidden !important;
+    position: relative !important;
+}
+
+.small-box:hover {
+    transform: scale(1.1) !important;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.2) !important;
+}
+
+.small-box .inner {
+    padding: 1rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 100% !important;
+}
+
+.small-box .inner h3 {
+    font-size: 2rem !important;
+    font-weight: 700 !important;
+    margin: 0 !important;
+    color: #ffffff !important;
+}
+
+.small-box .inner p {
+    font-size: 0.7rem !important;
+    opacity: 0.9;
+    color: rgba(255,255,255,0.85) !important;
+    margin: 2px 0 0 0 !important;
+}
+
+.small-box .icon {
+    display: none !important;
+}
+
+.small-box .small-box-footer {
+    display: none !important;
+}
+
+/* ============================================
+   GRID LAYOUT - 3 COLUMNS FOR CARDS
+   ============================================ */
+
+.dashboard-apps {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 25px !important;
+    justify-items: center !important;
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (max-width: 1024px) {
+    .dashboard-apps {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .dashboard-apps {
+        grid-template-columns: 1fr !important;
+    }
+    
+    .dashboard .app-list .app .card,
+    .dashboard .dashboard-apps .app .card {
+        width: 160px !important;
+        height: 160px !important;
+    }
+    
+    .small-box {
+        width: 130px !important;
+        height: 130px !important;
+    }
+    
+    .small-box .inner h3 {
+        font-size: 1.5rem !important;
+    }
+}
+
+/* ============================================
+   DARK MODE
+   ============================================ */
+
+@media (prefers-color-scheme: dark) {
+    .dashboard .app-list .app .card,
+    .dashboard .dashboard-apps .app .card {
+        background: linear-gradient(135deg, #1e293b, #0f172a) !important;
+        border-color: rgba(13,148,136,0.2) !important;
+    }
+    
+    .dashboard .app-list .app .card .card-body .app-name,
+    .dashboard .dashboard-apps .app .card .card-body .app-name {
+        color: #e2e8f0 !important;
+    }
+    
+    .small-box {
+        border-color: rgba(255,255,255,0.05) !important;
+    }
 }
