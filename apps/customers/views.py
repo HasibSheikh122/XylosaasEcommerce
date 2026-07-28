@@ -30,19 +30,22 @@ class LoginView(APIView):
 @method_decorator(csrf_exempt, name='dispatch')
 class RegisterView(APIView):
     permission_classes = [AllowAny]
-
+    
     def post(self, request):
+        print("--- Request received in RegisterView ---")
+        print("Tenant:", getattr(request, 'tenant', 'No tenant found'))
+
         serializer = UserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
-            # request.tenant ব্যবহার করুন, এটি django-tenants থেকে সরাসরি কারেন্ট টেন্যান্ট দেয়
+            # এখানে current_tenant কে রিকোয়েস্ট থেকে নিতে হবে
             current_tenant = request.tenant 
             
             with transaction.atomic():
                 user = serializer.save()
                 
-                # কাস্টমার প্রোফাইল তৈরি
+                # এখন current_tenant সঠিকভাবে কাজ করবে
                 Customer.objects.create(
-                    tenant=current_tenant, # এখানে রিকোয়েস্ট থেকে পাওয়া টেন্যান্ট সেট হবে
+                    tenant=current_tenant, 
                     user=user,
                     email=user.email,
                     first_name=user.first_name,

@@ -26,7 +26,14 @@ SECRET_KEY = 'django-insecure--x8szdi6j!=n!u0+g&(#5qr(i2o-!jwdwhdx9vz#%h@unv&j4e
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'xyzstore.localhost', '.xyzstore.localhost']
+ALLOWED_HOSTS = [
+    'localhost', 
+    '127.0.0.1', 
+    'xyzstore.localhost', 
+    'megamart.localhost', 
+    'hasibsk.localhost', 
+    '.localhost' # এটি দিলে সব সাব-ডোমেইন একসাথে কাজ করবে
+]
 
 # ==============================================================================
 # APPLICATION DEFINITION (django-tenants Configuration)
@@ -83,8 +90,8 @@ INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in S
 
 MIDDLEWARE = [
     'django_tenants.middleware.main.TenantMainMiddleware', # ১ নম্বর
-    'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware', # 👈 CORS মিডলওয়্যারটি এখানে যোগ করা সেফ
+    'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -201,8 +208,9 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
+    # এখানে AllowAny দেওয়া হলো যাতে রেজিস্ট্রেশন এন্ডপয়েন্ট কাজ করে
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+        'rest_framework.permissions.AllowAny', 
     ],
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
@@ -211,12 +219,11 @@ REST_FRAMEWORK = {
    'DEFAULT_THROTTLE_RATES': {
         'anon': '100/day',
         'user': '1000/day',
-        'tenant_creation': '3/day', # 👈 একজন ইউজার দিনে সর্বোচ্চ ৩টি স্টোর ক্রিয়েট করার রিকোয়েস্ট পাঠাতে পারবে
+        'tenant_creation': '3/day',
     },
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
 }
-
 # JWT Settings
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
@@ -236,6 +243,10 @@ CSRF_COOKIE_SECURE = False  # Development mode, set to True in production
 # সেশন কুকি ডোমেইন এবং সিকিউরিটি ঠিক করুন
 SESSION_COOKIE_DOMAIN = None
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+
+CSRF_COOKIE_DOMAIN = None # অথবা প্রয়োজনে '.localhost'
+CSRF_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SAMESITE = 'Lax'
 
 
 
@@ -302,6 +313,11 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://.*\.localhost:3000$",
 ]
+CSRF_TRUSTED_ORIGINS = [
+    "http://xyzstore.localhost:3000",
+    "http://megamart.localhost:3000",
+    "http://localhost:3000",
+]
 
 # নিচে এগুলোও যোগ করুন যেন Preflight রিকোয়েস্ট (OPTIONS) কাজ করে
 CORS_ALLOW_HEADERS = [
@@ -312,6 +328,15 @@ CORS_ALLOW_HEADERS = [
     "x-csrftoken",
     "x-requested-with",
     "x-tenant-id", # আপনার টেন্যান্ট হেডার
+]
+
+CORS_ALLOW_METHODS = [
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
 ]
 
 

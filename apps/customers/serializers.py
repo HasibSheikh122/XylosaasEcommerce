@@ -9,9 +9,10 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
+    
     class Meta:
         model = User
-        fields = ('email', 'password', 'first_name', 'last_name', 'tenant')
+        fields = ('email', 'password', 'first_name', 'last_name')
         extra_kwargs = {
             'password': {'write_only': True},
             'email': {'required': True} # ইমেইল বাধ্যতামূলক করা
