@@ -10,8 +10,8 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 import os
-from datetime import timedelta
 from pathlib import Path
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,11 +20,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure--x8szdi6j!=n!u0+g&(#5qr(i2o-!jwdwhdx9vz#%h@unv&j4e'
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Env ভ্যারিয়েবল রিড
+DEBUG = os.getenv('DEBUG', 'True') == 'True'
+SECRET_KEY = os.getenv('SECRET_KEY', 'default-insecure-key-for-dev')
 
 ALLOWED_HOSTS = [
     'localhost', 
@@ -100,8 +98,9 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'xyloshop.urls'
-PUBLIC_SCHEMA_URLCONF = 'xyloshop.urls'
+# URL Routing Isolation
+ROOT_URLCONF = 'xyloshop.urls'                  # টেন্যান্ট স্কিমার জন্য
+PUBLIC_SCHEMA_URLCONF = 'xyloshop.urls_public'   # পাবলিক স্কিমার জন্য
 
 # ==============================================================================
 # MULTI-TENANT EXTRA SETTINGS (মিসিং অংশ)
@@ -131,14 +130,15 @@ WSGI_APPLICATION = 'xyloshop.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# Database
 DATABASES = {
     'default': {
         'ENGINE': 'django_tenants.postgresql_backend',
-        'NAME': 'xylosaas_ecommerce', # আপনার ডাটাবেসের নাম
-        'USER': 'postgres',            # সাধারণত ডিফল্ট ইউজার postgres থাকে
-        'PASSWORD': '123321',   # PostgreSQL ইনস্টল করার সময় যে পাসওয়ার্ড দিয়েছিলেন
-        'HOST': 'localhost',           # যেহেতু নিজের কম্পিউটারে চালাচ্ছেন
-        'PORT': '5432',                # PostgreSQL এর ডিফল্ট পোর্ট সাধারণত 5432 হয়
+        'NAME': os.getenv('DB_NAME', 'xylosaas_ecommerce'),
+        'USER': os.getenv('DB_USER', 'postgres'),
+        'PASSWORD': os.getenv('DB_PASSWORD', '123321'),
+        'HOST': os.getenv('DB_HOST', 'localhost'),
+        'PORT': os.getenv('DB_PORT', '5432'),
     }
 }
 
@@ -201,22 +201,20 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-
-# REST Framework
+# REST Framework: Deny-by-default
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
-    # এখানে AllowAny দেওয়া হলো যাতে রেজিস্ট্রেশন এন্ডপয়েন্ট কাজ করে
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny', 
+        'rest_framework.permissions.IsAuthenticated',  # ডিফল্ট প্রোটেকশন
     ],
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
     ],
-   'DEFAULT_THROTTLE_RATES': {
+    'DEFAULT_THROTTLE_RATES': {
         'anon': '100/day',
         'user': '1000/day',
         'tenant_creation': '3/day',
