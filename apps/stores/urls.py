@@ -1,32 +1,21 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from .views import (
-    StoreSettingsViewSet, 
-    StoreCategoryViewSet
+    StoreSettingsViewSet,
+    StoreStaffViewSet,
+    StoreCategoryViewSet,
+    StorePageViewSet,
+    StoreNotificationViewSet,
 )
 
-urlpatterns = [
-    # --- Category Endpoints ---
-    path('categories/', StoreCategoryViewSet.as_view({
-        'get': 'list', 
-        'post': 'create'
-    }), name='category-list'),
-    
-    path('categories/<int:pk>/', StoreCategoryViewSet.as_view({
-        'get': 'retrieve', 
-        'put': 'update', 
-        'patch': 'partial_update', 
-        'delete': 'destroy'
-    }), name='category-detail'),
+router = DefaultRouter()
+router.register(r'staff', StoreStaffViewSet, basename='store-staff')
+router.register(r'categories', StoreCategoryViewSet, basename='store-category')
+router.register(r'pages', StorePageViewSet, basename='store-page')
+router.register(r'notifications', StoreNotificationViewSet, basename='store-notification')
 
-    # --- Store Settings Endpoints ---
-    # সেটিংস গেট এবং প্যাচ করার জন্য
-    path('settings/', StoreSettingsViewSet.as_view({
-        'get': 'retrieve', 
-        'patch': 'partial_update'
-    }), name='store-settings'),
-    
-    # ব্র্যান্ডিং আপডেটের কাস্টম অ্যাকশন
-    path('settings/branding/', StoreSettingsViewSet.as_view({
-        'patch': 'update_branding'
-    }), name='store-settings-branding'),
+urlpatterns = [
+    # স্টোর সেটিংসের একক এন্ডপয়েন্ট (GET: ভিউ, PUT/PATCH: আপডেট)
+    path('settings/', StoreSettingsViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'update'}), name='store-settings'),
+    path('', include(router.urls)),
 ]

@@ -19,7 +19,7 @@ from .serializers import (
 
 
 class BaseTenantViewSet(viewsets.ModelViewSet):
-    """টেন্যান্ট ফিল্টারিং এবং অটো-অ্যাসাইন করার কমন বেস ভিউসেট"""
+    """টেন্যান্ট অনুযায়ী কুয়েরিসেট ফিল্টার এবং অটো-অ্যাসাইন করার বেস ক্লাস"""
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
@@ -36,6 +36,7 @@ class BaseTenantViewSet(viewsets.ModelViewSet):
 
 
 class CarrierViewSet(BaseTenantViewSet):
+    """কুরিয়ার সার্ভিস কনফিগারেশন ভিউসেট"""
     queryset = Carrier.objects.all()
     serializer_class = CarrierSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter]
@@ -44,6 +45,7 @@ class CarrierViewSet(BaseTenantViewSet):
 
 
 class ShippingZoneViewSet(BaseTenantViewSet):
+    """ডেলিভারি জোন ভিউসেট"""
     queryset = ShippingZone.objects.all()
     serializer_class = ShippingZoneSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -53,6 +55,7 @@ class ShippingZoneViewSet(BaseTenantViewSet):
 
 
 class ShippingMethodViewSet(BaseTenantViewSet):
+    """শিপিং মেথড এবং চার্জ ক্যালকুলেশন ভিউসেট"""
     queryset = ShippingMethod.objects.select_related('carrier').prefetch_related('zones').all()
     serializer_class = ShippingMethodSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -62,7 +65,6 @@ class ShippingMethodViewSet(BaseTenantViewSet):
 
     @action(detail=False, methods=['post'], url_path='calculate-rates')
     def calculate_rates(self, request):
-        """চেকআউটে কাস্টমারের কার্ট অনুযায়ী সব এভেইলেবল শিপিং মেথড এবং তাদের চার্জ গণনা"""
         serializer = CalculateShippingSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -75,7 +77,6 @@ class ShippingMethodViewSet(BaseTenantViewSet):
         available_rates = []
 
         for method in methods:
-            # জোন ম্যাচিং চেক
             if method.zones.exists() and address:
                 matched_zone = any(zone.is_in_zone(address) for zone in method.zones.all())
                 if not matched_zone:
@@ -96,6 +97,7 @@ class ShippingMethodViewSet(BaseTenantViewSet):
 
 
 class ShippingRateViewSet(BaseTenantViewSet):
+    """কন্ডিশনাল শিপিং রেট ভিউসেট"""
     queryset = ShippingRate.objects.select_related('method', 'zone').all()
     serializer_class = ShippingRateSerializer
     filter_backends = [DjangoFilterBackend, OrderingFilter]
@@ -104,6 +106,7 @@ class ShippingRateViewSet(BaseTenantViewSet):
 
 
 class ShipmentViewSet(BaseTenantViewSet):
+    """অর্ডার শিপমেন্ট ট্র্যাকিং ভিউসেট"""
     queryset = Shipment.objects.select_related('order', 'method', 'tenant').all()
     serializer_class = ShipmentSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -115,16 +118,12 @@ class ShipmentViewSet(BaseTenantViewSet):
         kwargs = {}
         if hasattr(self.request, 'tenant'):
             kwargs['tenant'] = self.request.tenant
-        
-        # ইউনিক শিপমেন্ট নম্বর অটো-জেনারেট
         if 'shipment_number' not in serializer.validated_data:
             kwargs['shipment_number'] = f"SHP-{uuid.uuid4().hex[:8].upper()}"
-            
         serializer.save(**kwargs)
 
     @action(detail=True, methods=['post'], url_path='update-tracking')
     def update_tracking(self, request, pk=None):
-        """শিপমেন্টে নতুন ট্র্যাকিং স্ট্যাটাস ও লোকেশন হিস্ট্রি যুক্ত করা"""
         shipment = self.get_object()
         serializer = TrackingUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -134,8 +133,7 @@ class ShipmentViewSet(BaseTenantViewSet):
         loc = serializer.validated_data.get('location', '')
 
         shipment.add_tracking_update(status=status_val, description=desc, location=loc)
-
         return Response(
-            {'message': 'ট্র্যাকিং আপডেট সফল হয়েছে', 'shipment': ShipmentSerializer(shipment).data},
+            {'message': 'ট্র্যাকিং আপডেট হয়েছে', 'shipment': ShipmentSerializer(shipment).data},
             status=status.HTTP_200_OK
         )

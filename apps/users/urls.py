@@ -1,20 +1,19 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
-    TokenRefreshView,
-)
-from .views import UserViewSet
+from rest_framework_simplejwt.views import TokenRefreshView
+from .views import UserViewSet, CustomTokenObtainPairView
 
 router = DefaultRouter()
-router.register(r'users', UserViewSet, basename='user')
+router.register(r'members', UserViewSet, basename='user-member')
 
 urlpatterns = [
-    # ⚠️ পরিবর্তন: লগইন এবং টোকেন রিফ্রেশ পাথ দুটিকে রাউটারের উপরে নিয়ে আসা হয়েছে
-    # এর ফলে জ্যাঙ্গো 'users/login/' রিকোয়েস্ট পেলে রাউটারে যাওয়ার আগেই টোকেন ভিউ চালু করবে।
-    path('users/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('users/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    # Auth & JWT Endpoints
+    path('login/', CustomTokenObtainPairView.as_view(), name='auth-login'),
+    path('token/refresh/', TokenRefreshView.as_view(), name='auth-token-refresh'),
+    path('register/', UserViewSet.as_view({'post': 'register'}), name='auth-register'),
+    path('me/', UserViewSet.as_view({'get': 'me', 'put': 'me', 'patch': 'me'}), name='auth-me'),
+    path('change-password/', UserViewSet.as_view({'post': 'change_password'}), name='auth-change-password'),
 
-    # Router থাকবে সবার নিচে
+    # Staff / Members Management
     path('', include(router.urls)),
 ]

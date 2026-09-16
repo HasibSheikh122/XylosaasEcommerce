@@ -1,13 +1,14 @@
 import re
+from datetime import timedelta
 from rest_framework import serializers
 from django.utils import timezone
 from django.db import transaction
-from datetime import timedelta
+
 from apps.tenants.models import Tenant, Domain
 from apps.subscriptions.models import Plan
 
+
 class TenantRegistrationSerializer(serializers.ModelSerializer):
-    # শুধু একটি আইডি নিলেই হবে না, প্ল্যানটি যেন অ্যাক্টিভ থাকে তাও ব্যাকএন্ডে চেক করবে
     plan = serializers.PrimaryKeyRelatedField(
         queryset=Plan.objects.filter(is_active=True),
         required=True,
@@ -19,23 +20,13 @@ class TenantRegistrationSerializer(serializers.ModelSerializer):
         fields = ['store_name', 'subdomain', 'plan']
 
     def validate(self, attrs):
-        """ 
-        মাল্টি-ফিল্ড ক্রস ভ্যালিডেশন: 
-        এখানে এমন লজিক থাকবে যা একাধিক ফিল্ড এবং রিকোয়েস্ট ইউজারের ওপর নির্ভর করে।
-        """
         request = self.context.get('request')
         
         if request and request.user.is_authenticated:
             user = request.user
-            
-            # 🔒 অ্যান্টি-অ্যাবিউজ লজিক: চেক করা ইউজার অলরেডি কোনো একটিভ টেন্যান্টের ওনার কিনা
-            # (SaaS বিজনেসে সাধারণত ফ্রিতে বা একটি অ্যাকাউন্টে একাধিক শপ খুলতে দেওয়া হয় না, যদি না প্রিমিয়াম প্ল্যান থাকে)
-            has_active_tenant = Tenant.objects.filter(
-                subdomain=user.tenant.subdomain if user.tenant else None, 
-                is_active=True
-            ).exists()
-            
-            if has_active_tenant:
+            # নিরাপদ টেন্যান্ট ওনারশিপ চেক
+            user_tenant = getattr(user, 'tenant', None)
+            if user_tenant and user_tenant.is_active:
                 raise serializers.ValidationError(
                     {"user": "You already have an active store. Your account is limited to one store at a time."}
                 )
@@ -43,13 +34,10 @@ class TenantRegistrationSerializer(serializers.ModelSerializer):
         return attrs
 
     def validate_store_name(self, value):
-        # একাধিক স্পেস থাকলে তা সিঙ্গেল স্পেসে রূপান্তর করা (যেমন: "My   Super   Shop" -> "My Super Shop")
         value = " ".join(value.split())
-        
         if len(value) < 3 or len(value) > 100:
             raise serializers.ValidationError("Store name must be between 3 and 100 characters long.")
             
-        # ক্যারেক্টার ভ্যালিডেশন (নিরাপদ নাম নিশ্চিত করা)
         if not re.match(r'^[a-zA-Z0-9\s\-\.\,\&\']+$', value):
             raise serializers.ValidationError("Store name contains unsupported special characters.")
             
@@ -58,7 +46,6 @@ class TenantRegistrationSerializer(serializers.ModelSerializer):
     def validate_subdomain(self, value):
         value = value.lower().strip()
 
-        # ১. ব্লকলিস্টেড বা সিস্টেম ডোমেন প্রোটেকশন
         reserved_keywords = {
             'admin', 'administrator', 'api', 'root', 'www', 'mail', 'secure',
             'shophive', 'xyloshop', 'xylosaas', 'support', 'billing', 'dashboard',
@@ -69,7 +56,6 @@ class TenantRegistrationSerializer(serializers.ModelSerializer):
         if value in reserved_keywords:
             raise serializers.ValidationError(f"'{value}' is reserved for platform infrastructure and cannot be used.")
 
-        # ২. ডোমেন নেম স্ট্যান্ডার্ড (কোনো হাইফেন দিয়ে শুরু বা শেষ হতে পারবে না, আন্ডারস্কোর নিষিদ্ধ)
         if not re.match(r'^[a-z0-9](-?[a-z0-9])*$', value):
             raise serializers.ValidationError(
                 "Subdomain must contain only lowercase alphanumeric characters or hyphens, and cannot start/end with a hyphen."
@@ -78,31 +64,30 @@ class TenantRegistrationSerializer(serializers.ModelSerializer):
         if len(value) < 3 or len(value) > 63:
             raise serializers.ValidationError("Subdomain must be between 3 and 63 characters.")
 
-        # ৩. ডুপ্লিকেট চেক
         if Tenant.objects.filter(subdomain=value).exists():
             raise serializers.ValidationError("This subdomain is already registered by another merchant.")
 
         return value
 
     def create(self, validated_data):
-        """ 
-        অ্যাটোমিক ট্রানজেকশন এবং ডাইনামিক কোটা পলিসি 
-        """
         subdomain = validated_data['subdomain']
         validated_data['schema_name'] = subdomain 
+        # Database NOT NULL কনস্ট্রেইন্ট ফিক্স:
+        validated_data['name'] = validated_data.get('name') or validated_data['store_name']
         plan = validated_data['plan']
         
-        # টাইম ক্যালকুলেশন
+        # ট্রায়াল এবং সাবস্ক্রিপশন মেয়াদ ক্যালকুলেশন
         now = timezone.now()
-        if getattr(plan, 'trial_days', 0) > 0:
+        trial_days = getattr(plan, 'trial_days', 0)
+        if trial_days > 0:
             validated_data['is_trial'] = True
-            validated_data['trial_ends_at'] = now + timedelta(days=plan.trial_days)
+            validated_data['trial_ends_at'] = now + timedelta(days=trial_days)
             validated_data['subscription_end_date'] = validated_data['trial_ends_at']
         else:
             validated_data['is_trial'] = False
             validated_data['subscription_end_date'] = now + timedelta(days=30)
 
-        # রিসোর্স লিমিট এসাইনমেন্ট
+        # রিসোর্স কোটা অ্যাসাইনমেন্ট
         validated_data['max_products'] = getattr(plan, 'max_products', 100)
         validated_data['max_staff'] = getattr(plan, 'max_staff', 5)
         validated_data['max_orders_per_month'] = getattr(plan, 'max_orders', 500)
@@ -110,21 +95,17 @@ class TenantRegistrationSerializer(serializers.ModelSerializer):
 
         request = self.context.get('request')
 
-        # 🔥 ডাটাবেস ট্রানজেকশন লক: স্কিমা বা ডোমেন যেকোনো একটি ফেইল করলে যেন কোনো ডেটা ক্রাশ না করে
         with transaction.atomic():
-            # ১. টেন্যান্ট এবং পোস্টগ্রেস স্কিমা তৈরি (django-tenants ব্যাকএন্ড ট্র্রিগার করবে)
             tenant = super().create(validated_data)
             
-            # ২. এই টেন্যান্টের জন্য সাথে সাথে ডোমেন ম্যাপ ক্রিয়েট করা (লোকালহোস্ট ও প্রোডাকশন হ্যান্ডেল করবে)
-            # প্রোডাকশনে এটি আপনার মেইন ডোমেন (যেমন: shophive.ai) এর সাথে যুক্ত হবে
-            full_domain = f"{subdomain}.localhost" # অথবা সেটিংস থেকে ডাইনামিক ডোমেন নিতে পারেন
+            # লোকাল এবং সাবডোমেন রাউটিং
+            full_domain = f"{subdomain}.localhost"
             Domain.objects.create(
                 domain=full_domain,
                 tenant=tenant,
                 is_primary=True
             )
 
-            # ৩. ওনারশিপ ম্যাপিং ও রোল পরিবর্তন
             if request and request.user.is_authenticated:
                 user = request.user
                 user.tenant = tenant
@@ -132,3 +113,51 @@ class TenantRegistrationSerializer(serializers.ModelSerializer):
                 user.save()
 
         return tenant
+
+
+class MerchantStoreDetailSerializer(serializers.ModelSerializer):
+    """স্টোরের সেটিংস দেখা এবং ওনার কর্তৃক আপডেট করার সিরিয়ালাইজার"""
+    assigned_domain = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Tenant
+        fields = [
+            'id',
+            'store_name',
+            'subdomain',
+            'schema_name',
+            'assigned_domain',
+            'custom_domain',
+            'logo',
+            'favicon',
+            'is_active',
+            'max_products',
+            'max_staff',
+            'max_orders_per_month',
+            'ai_enabled',
+            'is_trial',
+            'trial_ends_at',
+            'subscription_end_date',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'id',
+            'subdomain',
+            'schema_name',
+            'assigned_domain',
+            'is_active',
+            'max_products',
+            'max_staff',
+            'max_orders_per_month',
+            'ai_enabled',
+            'is_trial',
+            'trial_ends_at',
+            'subscription_end_date',
+            'created_at',
+            'updated_at',
+        ]
+
+    def get_assigned_domain(self, obj):
+        primary = obj.domains.filter(is_primary=True).first()
+        return primary.domain if primary else f"{obj.subdomain}.localhost"

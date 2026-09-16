@@ -12,6 +12,7 @@ class OrderItemInline(TabularInline):
     readonly_fields = ('product_name', 'product_sku', 'unit_price', 'total_price', 'tax')
     can_delete = False
 
+
 @admin.register(Order)
 class OrderAdmin(ModelAdmin):
     list_display = ('order_number', 'tenant', 'customer', 'status', 'payment_status', 'total', 'created_at')
@@ -37,6 +38,7 @@ class OrderAdmin(ModelAdmin):
     )
     readonly_fields = ('created_at', 'updated_at', 'order_number')
 
+
 # ==========================================
 # CART INLINES & ADMIN
 # ==========================================
@@ -44,7 +46,8 @@ class OrderAdmin(ModelAdmin):
 class CartItemInline(TabularInline):
     model = CartItem
     extra = 0
-    readonly_fields = ('product_name', 'product_sku', 'unit_price')
+    readonly_fields = ('product_name', 'product_sku', 'unit_price', 'quantity')
+
 
 @admin.register(Cart)
 class CartAdmin(ModelAdmin):
@@ -54,20 +57,26 @@ class CartAdmin(ModelAdmin):
     inlines = [CartItemInline]
     readonly_fields = ('created_at', 'updated_at', 'cart_token')
 
+
 # ==========================================
 # CHECKOUT ADMIN
 # ==========================================
 
 @admin.register(Checkout)
 class CheckoutAdmin(ModelAdmin):
-    list_display = ('id', 'customer_name', 'status', 'payment_method', 'payment_status', 'grand_total', 'created_at')
+    list_display = ('id', 'customer_name', 'status', 'payment_method', 'payment_status', 'get_grand_total', 'created_at')
     list_filter = ('status', 'payment_status', 'payment_method', 'tenant')
     search_fields = ('customer_name', 'customer_email', 'customer_phone', 'order__order_number')
     readonly_fields = ('created_at', 'updated_at', 'completed_at')
 
+    @admin.display(description='Grand Total')
+    def get_grand_total(self, obj):
+        return obj.cart.grand_total if obj.cart else "0.00"
+
+
 @admin.register(CheckoutLog)
 class CheckoutLogAdmin(ModelAdmin):
-    list_display = ('checkout', 'log_type', 'step', 'created_at')
+    list_display = ('id', 'checkout', 'log_type', 'message', 'created_at')
     list_filter = ('log_type', 'created_at')
     search_fields = ('message', 'checkout__id')
     readonly_fields = ('created_at',)
