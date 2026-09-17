@@ -338,4 +338,13 @@ CORS_ALLOW_METHODS = [
 ]
 
 
+from celery.schedules import crontab
 
+# Celery Beat Periodic Task Settings
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+CELERY_BEAT_SCHEDULE = {
+    'daily-subscription-audit': {
+        'task': 'apps.subscriptions.tasks.check_expired_subscriptions',
+        'schedule': crontab(hour=0, minute=0),  # প্রতিদিন রাত ১২:০০ টায় স্বয়ংক্রিয়ভাবে চলবে
+    },
+}

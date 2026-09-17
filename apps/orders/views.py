@@ -10,6 +10,7 @@ from apps.products.models import Product
 from apps.inventory.models import Inventory
 from apps.coupons.models import Coupon, CouponUsage
 from apps.customers.models import Customer
+from apps.orders.tasks import send_order_confirmation_email
 from .models import Order, OrderItem, Cart, CartItem, Checkout, CheckoutLog
 from .serializers import (
     OrderSerializer,
@@ -210,6 +211,7 @@ class CheckoutViewSet(viewsets.ModelViewSet):
         - অর্ডার ও আইটেম স্ন্যাপশট তৈরি
         - কুপন ইউসেজ হিস্ট্রি সংরক্ষণ
         - কাস্টমার টোটাল স্পেন্ড ও লাস্ট অর্ডার ডেট আপডেট
+        - Celery-র মাধ্যমে ব্যাকগ্রাউন্ডে কনফার্মেশন ইমেইল টাস্ক ট্রিগার
         """
         checkout = self.get_object()
         if checkout.status == 'completed':
@@ -313,6 +315,14 @@ class CheckoutViewSet(viewsets.ModelViewSet):
                     checkout=checkout,
                     log_type='success',
                     message=f'Order {order.order_number} successfully placed.'
+                )
+
+                # ৭. ডাটাবেজে ট্রানজাকশন সফলভাবে কমিট হওয়ার পর Celery টাস্ক এক্সিকিউট করা
+                transaction.on_commit(
+                    lambda: send_order_confirmation_email.delay(
+                        checkout.tenant.schema_name,
+                        order.id
+                    )
                 )
 
             return Response({
