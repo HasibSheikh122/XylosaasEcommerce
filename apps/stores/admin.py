@@ -1,42 +1,133 @@
 from django.contrib import admin
-from django.contrib.admin import ModelAdmin
-from .models import StoreSettings, StoreStaff, StoreCategory, StorePage, StoreNotification
+from django.db import connection
+from django.utils.html import format_html
+from .models import (
+    StoreSettings,
+    StoreBanner,
+    StoreCategory,
+    StoreFAQ,
+    StoreTestimonial,
+    StoreNewsletterSubscriber,
+    StoreBlogPost,
+    StoreStaff,
+    StorePage,
+    StoreNotification,
+)
+
+
+class BaseTenantAdmin(admin.ModelAdmin):
+    """স্বয়ংক্রিয়ভাবে কারেন্ট টেন্যান্ট অ্যাসাইন করার জন্য বেস অ্যাডমিন"""
+    def save_model(self, request, obj, form, change):
+        if not getattr(obj, 'tenant_id', None):
+            tenant = getattr(request, 'tenant', None) or getattr(connection, 'tenant', None)
+            if tenant:
+                obj.tenant = tenant
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(StoreBanner)
+class StoreBannerAdmin(BaseTenantAdmin):
+    list_display = (
+        'title',
+        'banner_type',
+        'left_preview',
+        'right_preview',
+        'countdown_end',
+        'display_order',
+        'is_active',
+    )
+    list_filter = ('banner_type', 'is_active')
+    search_fields = ('title', 'subtitle', 'badge_title')
+    list_editable = ('display_order', 'is_active')
+
+    fieldsets = (
+        ('Banner Classification', {
+            'fields': ('banner_type', 'badge_title', 'title', 'subtitle')
+        }),
+        ('Images (Left & Right)', {
+            'fields': ('image', 'secondary_image'),
+            'description': 'Summer Countdown ব্যানারের ক্ষেত্রে: image = বাম পাশের ছবি, secondary_image = ডান পাশের ছবি।'
+        }),
+        ('Call To Action', {
+            'fields': ('button_text', 'target_url')
+        }),
+        ('Timer Settings', {
+            'fields': ('countdown_end',),
+            'description': 'অফারটি শেষ হওয়ার সুনির্দিষ্ট তারিখ ও সময় নির্ধারণ করুন।'
+        }),
+        ('Display Controls', {
+            'fields': ('display_order', 'is_active')
+        }),
+    )
+
+    def left_preview(self, obj):
+        if obj.image:
+            return format_html(
+                '<img src="{}" style="width: 50px; height: 35px; object-fit: cover; border-radius: 6px;" />',
+                obj.image.url
+            )
+        return "-"
+    left_preview.short_description = "Left Image"
+
+    def right_preview(self, obj):
+        if obj.secondary_image:
+            return format_html(
+                '<img src="{}" style="width: 50px; height: 35px; object-fit: cover; border-radius: 6px;" />',
+                obj.secondary_image.url
+            )
+        return "-"
+    right_preview.short_description = "Right Image"
+
 
 @admin.register(StoreSettings)
-class StoreSettingsAdmin(ModelAdmin):
-    list_display = ('store_name', 'tenant', 'currency', 'theme')
-    list_filter = ('currency', 'tenant')
-    fieldsets = (
-        ('General Info', {'fields': ('tenant', 'store_name', 'store_tagline', 'store_description', 'store_logo', 'store_favicon')}),
-        ('Branding & Theme', {'fields': ('primary_color', 'secondary_color', 'accent_color', 'font_family', 'theme', 'custom_css', 'custom_js'), 'classes': ('collapse',)}),
-        ('Regional & Domain', {'fields': ('country', 'city', 'timezone', 'currency', 'currency_symbol', 'subdomain', 'custom_domain')}),
-        ('Policies & Checkout', {'fields': ('enable_guest_checkout', 'enable_cod', 'enable_online_payment', 'privacy_policy', 'terms_conditions', 'return_policy', 'shipping_policy'), 'classes': ('collapse',)}),
-        ('Tracking & SEO', {'fields': ('google_analytics_id', 'facebook_pixel_id', 'seo_title', 'seo_description', 'seo_keywords')}),
-    )
+class StoreSettingsAdmin(BaseTenantAdmin):
+    list_display = ('store_name', 'subdomain', 'currency', 'theme', 'show_announcement_bar')
 
-@admin.register(StoreStaff)
-class StoreStaffAdmin(ModelAdmin):
-    list_display = ('user', 'tenant', 'role', 'status', 'position')
-    list_filter = ('role', 'status', 'tenant')
-    search_fields = ('user__email', 'employee_id')
 
 @admin.register(StoreCategory)
-class StoreCategoryAdmin(ModelAdmin):
-    list_display = ('name', 'tenant', 'is_active', 'display_order', 'show_in_nav')
-    list_filter = ('is_active', 'tenant')
+class StoreCategoryAdmin(BaseTenantAdmin):
+    list_display = ('name', 'slug', 'display_order', 'show_on_homepage', 'is_active')
     prepopulated_fields = {'slug': ('name',)}
+    list_editable = ('display_order', 'show_on_homepage', 'is_active')
+
+
+@admin.register(StoreFAQ)
+class StoreFAQAdmin(BaseTenantAdmin):
+    list_display = ('question', 'display_order', 'is_active')
+    list_editable = ('display_order', 'is_active')
+
+
+@admin.register(StoreTestimonial)
+class StoreTestimonialAdmin(BaseTenantAdmin):
+    list_display = ('customer_name', 'designation', 'rating', 'is_featured')
+    list_filter = ('rating', 'is_featured')
+
+
+@admin.register(StoreBlogPost)
+class StoreBlogPostAdmin(BaseTenantAdmin):
+    list_display = ('title', 'category_tag', 'author_name', 'published_at', 'is_published')
+    prepopulated_fields = {'slug': ('title',)}
+    list_filter = ('is_published', 'category_tag')
+
+
+@admin.register(StoreNewsletterSubscriber)
+class StoreNewsletterSubscriberAdmin(BaseTenantAdmin):
+    list_display = ('email', 'subscribed_at')
+    search_fields = ('email',)
+
+
+@admin.register(StoreStaff)
+class StoreStaffAdmin(BaseTenantAdmin):
+    list_display = ('user', 'role', 'department', 'status')
+    list_filter = ('role', 'status')
+
 
 @admin.register(StorePage)
-class StorePageAdmin(ModelAdmin):
-    list_display = ('title', 'page_type', 'is_published', 'show_in_header', 'show_in_footer')
-    list_filter = ('page_type', 'is_published', 'tenant')
-    prepopulated_fields = {'slug': ('title',)} # স্লাগ জেনারেট করার জন্য টাইটেল ব্যবহার করুন
-    fieldsets = (
-        ('Page Content', {'fields': ('tenant', 'page_type', 'title', 'slug', 'content', 'excerpt')}),
-        ('Display & SEO', {'fields': ('show_in_header', 'show_in_footer', 'display_order', 'is_published', 'seo_title', 'seo_description')}),
-    )
+class StorePageAdmin(BaseTenantAdmin):
+    list_display = ('title', 'page_type', 'is_published', 'show_in_footer')
+    prepopulated_fields = {'slug': ('title',)}
+
 
 @admin.register(StoreNotification)
-class StoreNotificationAdmin(ModelAdmin):
-    list_display = ('title', 'notification_type', 'priority', 'publish_from', 'is_active')
-    list_filter = ('notification_type', 'priority', 'is_active')
+class StoreNotificationAdmin(BaseTenantAdmin):
+    list_display = ('title', 'notification_type', 'priority', 'is_active')

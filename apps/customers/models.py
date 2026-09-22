@@ -1,5 +1,7 @@
 # apps/customers/models.py
 from django.db import models
+from django.utils import timezone
+
 
 class Customer(models.Model):
     tenant = models.ForeignKey('tenants.Tenant', on_delete=models.CASCADE)
@@ -28,7 +30,7 @@ class Customer(models.Model):
     # AI Data
     customer_segment = models.CharField(max_length=50, blank=True)
     lifetime_value = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    churn_risk = models.FloatField(default=0)  # 0-1 scale
+    churn_risk = models.FloatField(default=0)
     
     # Metadata
     notes = models.TextField(blank=True)
@@ -46,4 +48,11 @@ class Customer(models.Model):
 
     @property
     def full_name(self):
-        return f"{self.first_name} {self.last_name}"
+        name = f"{self.first_name} {self.last_name}".strip()
+        return name if name else self.email
+
+    @property
+    def last_active(self):
+        if self.user and self.user.last_login:
+            return self.user.last_login
+        return self.last_order_date or self.updated_at or self.created_at

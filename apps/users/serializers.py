@@ -1,3 +1,4 @@
+from decimal import Decimal
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -8,38 +9,87 @@ User = get_user_model()
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     """
-    লগইন করার পর JWT টোকেনের পাশাপাশি ইউজারের রোল, টেন্যান্ট এবং প্রোফাইল তথ্য রেসপন্সে পাঠাবে
+    ১. সাধারণ কাস্টমার লগইন সিরিয়ালাইজার (স্টোরফ্রন্ট ও কাস্টমার ড্যাশবোর্ডের জন্য)
     """
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
-        # JWT Payload-এ কাস্টম ক্লেইমস
         token['email'] = user.email
-        token['role'] = user.role
-        token['tenant_id'] = user.tenant.id if user.tenant else None
-        token['subdomain'] = user.tenant.subdomain if user.tenant else None
+        token['role'] = getattr(user, 'role', 'customer')
+        token['tenant_id'] = user.tenant.id if getattr(user, 'tenant', None) else None
+        token['subdomain'] = user.tenant.subdomain if getattr(user, 'tenant', None) else None
         return token
 
     def validate(self, attrs):
         data = super().validate(attrs)
-        # লগইন রেসপন্স বডিতে অতিরিক্ত তথ্য যুক্ত করা
+        user = self.user
         data['user'] = {
-            'id': self.user.id,
-            'email': self.user.email,
-            'first_name': self.user.first_name,
-            'last_name': self.user.last_name,
-            'role': self.user.role,
+            'id': user.id,
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'role': getattr(user, 'role', 'customer'),
             'tenant': {
-                'id': self.user.tenant.id,
-                'store_name': self.user.tenant.store_name,
-                'subdomain': self.user.tenant.subdomain,
-            } if self.user.tenant else None,
+                'id': user.tenant.id,
+                'store_name': user.tenant.store_name,
+                'subdomain': user.tenant.subdomain,
+            } if getattr(user, 'tenant', None) else None,
+        }
+        return data
+
+
+class MerchantTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """
+    ২. মার্চেন্ট পোর্টাল লগইন সিরিয়ালাইজার (কাস্টমারদের সরাসরি ব্লক করবে এবং স্টোর স্ট্যাটাস চেক করবে)
+    """
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        token['email'] = user.email
+        token['role'] = getattr(user, 'role', 'merchant')
+        token['is_staff'] = user.is_staff
+        token['subdomain'] = user.tenant.subdomain if getattr(user, 'tenant', None) else None
+        return token
+
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        user = self.user
+
+        # কাস্টমারদের অ্যাক্সেস ব্লক
+        if getattr(user, 'role', '') == 'customer' and not user.is_staff and not user.is_superuser:
+            raise serializers.ValidationError({
+                "detail": "এটি মার্চেন্ট অ্যাডমিন পোর্টাল। সাধারণ কাস্টমার অ্যাকাউন্ট দিয়ে এখানে প্রবেশ নিষেধ। অনুগ্রহ করে স্টোরফ্রন্ট থেকে লগইন করুন।"
+            })
+
+        # স্টোর ওনারদের ক্ষেত্রে স্টোর ও সাবস্ক্রিপশন অ্যাক্টিভেশন যাচাই
+        if not user.is_superuser:
+            tenant = getattr(user, 'tenant', None)
+            if not tenant:
+                raise serializers.ValidationError({
+                    "detail": "আপনার অ্যাকাউন্টের সাথে কোনো স্টোর যুক্ত নেই। প্রথমে একটি স্টোর রেজিস্ট্রেশন করুন।"
+                })
+
+            if not tenant.is_active:
+                raise serializers.ValidationError({
+                    "detail": "আপনার স্টোরটি এখনও সুপার অ্যাডমিনের অনুমোদনের অপেক্ষায় রয়েছে অথবা সাবস্ক্রিপশন স্থগিত রয়েছে।"
+                })
+
+        data['user'] = {
+            'id': user.id,
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'role': getattr(user, 'role', 'merchant'),
+            'tenant': {
+                'id': user.tenant.id if user.tenant else None,
+                'store_name': user.tenant.store_name if user.tenant else 'Master Platform',
+                'subdomain': user.tenant.subdomain if user.tenant else 'app',
+            } if getattr(user, 'tenant', None) else None,
         }
         return data
 
 
 class UserSerializer(serializers.ModelSerializer):
-    """ইউজার প্রোফাইল দেখা এবং আপডেট করার জন্য সিরিয়ালাইজার"""
     store_name = serializers.CharField(source='tenant.store_name', read_only=True)
     subdomain = serializers.CharField(source='tenant.subdomain', read_only=True)
 
@@ -55,7 +105,6 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class UserRegisterSerializer(serializers.ModelSerializer):
-    """নতুন ইউজার সাইন-আপ করার সিরিয়ালাইজার (username বাদ দিয়ে email বেসড)"""
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password_confirm = serializers.CharField(write_only=True, required=True)
 
@@ -71,8 +120,6 @@ class UserRegisterSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop('password_confirm')
         request = self.context.get('request')
-        
-        # টেন্যান্ট কনটেক্সট হ্যান্ডলিং
         tenant = getattr(request, 'tenant', None) if request else None
 
         user = User.objects.create_user(
@@ -88,7 +135,6 @@ class UserRegisterSerializer(serializers.ModelSerializer):
 
 
 class ChangePasswordSerializer(serializers.Serializer):
-    """পাসওয়ার্ড পরিবর্তন করার জন্য সিরিয়ালাইজার"""
     old_password = serializers.CharField(required=True)
     new_password = serializers.CharField(required=True, validators=[validate_password])
 

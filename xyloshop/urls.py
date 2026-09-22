@@ -41,6 +41,7 @@ urlpatterns = [
     path('api/v1/reviews/', include('apps.reviews.urls')),
     path('api/v1/analytics/', include('apps.analytics.urls')),
     path('api/v1/ai/', include('apps.ai_engine.urls')),
+    path('api/v1/chat/', include('apps.chat.urls')),
 ]
 
 if settings.DEBUG:

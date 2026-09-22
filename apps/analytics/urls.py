@@ -11,20 +11,22 @@ from .views import (
     AnalyticsInsightViewSet,
     PerformanceMetricsViewSet,
     ExportReportViewSet,
+    DashboardSummaryView,  # 🌟 Added view
 )
 
 router = DefaultRouter()
-router.register(r'sales', SalesAnalyticsViewSet, basename='analytics-sales')
-router.register(r'products', ProductAnalyticsViewSet, basename='analytics-product')
-router.register(r'customers', CustomerAnalyticsViewSet, basename='analytics-customer')
-router.register(r'categories', CategoryAnalyticsViewSet, basename='analytics-category')
-router.register(r'revenue', RevenueAnalyticsViewSet, basename='analytics-revenue')
-router.register(r'traffic', TrafficAnalyticsViewSet, basename='analytics-traffic')
-router.register(r'realtime', RealtimeAnalyticsViewSet, basename='analytics-realtime')
-router.register(r'insights', AnalyticsInsightViewSet, basename='analytics-insight')
-router.register(r'performance', PerformanceMetricsViewSet, basename='analytics-performance')
-router.register(r'exports', ExportReportViewSet, basename='analytics-export')
+router.register(r'sales', SalesAnalyticsViewSet, basename='analytics-sales')  #[cite: 17]
+router.register(r'products', ProductAnalyticsViewSet, basename='analytics-product')  #[cite: 17]
+router.register(r'customers', CustomerAnalyticsViewSet, basename='analytics-customer')  #[cite: 17]
+router.register(r'categories', CategoryAnalyticsViewSet, basename='analytics-category')  #[cite: 17]
+router.register(r'revenue', RevenueAnalyticsViewSet, basename='analytics-revenue')  #[cite: 17]
+router.register(r'traffic', TrafficAnalyticsViewSet, basename='analytics-traffic')  #[cite: 17]
+router.register(r'realtime', RealtimeAnalyticsViewSet, basename='analytics-realtime')  #[cite: 17]
+router.register(r'insights', AnalyticsInsightViewSet, basename='analytics-insight')  #[cite: 17]
+router.register(r'performance', PerformanceMetricsViewSet, basename='analytics-performance')  #[cite: 17]
+router.register(r'exports', ExportReportViewSet, basename='analytics-export')  #[cite: 17]
 
 urlpatterns = [
-    path('', include(router.urls)),
+    path('summary/', DashboardSummaryView.as_view(), name='analytics-dashboard-summary'),
+    path('', include(router.urls)),  #[cite: 17]
 ]

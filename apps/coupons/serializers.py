@@ -15,7 +15,10 @@ class CouponRuleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = CouponRule
-        fields = ['id', 'coupon', 'rule_type', 'rule_type_display', 'rule_value', 'is_required', 'order', 'created_at', 'updated_at']
+        fields = [
+            'id', 'coupon', 'rule_type', 'rule_type_display',
+            'rule_value', 'is_required', 'order', 'created_at', 'updated_at'
+        ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
@@ -41,7 +44,6 @@ class CouponSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'tenant', 'used_count', 'created_by', 'created_at', 'updated_at']
 
     def validate(self, attrs):
-        # ভ্যালিডেশনের সময় তারিখ যাচাই
         valid_from = attrs.get('valid_from', getattr(self.instance, 'valid_from', None))
         valid_to = attrs.get('valid_to', getattr(self.instance, 'valid_to', None))
         if valid_from and valid_to and valid_from >= valid_to:
@@ -64,7 +66,12 @@ class CouponUsageSerializer(serializers.ModelSerializer):
 
 
 class ValidateCouponRequestSerializer(serializers.Serializer):
-    """চেকআউটে ফ্রন্টএন্ড থেকে কুপন কোড টেস্ট করার ইনপুট ভ্যালিডেশন"""
+    """চেকআউট ও কার্টে কুপন কোড টেস্ট করার জন্য ইনপুট সিরিয়ালাইজার"""
     code = serializers.CharField(max_length=50)
     cart_total = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0.00'))
     customer_id = serializers.IntegerField(required=False, allow_null=True)
+    product_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list
+    )

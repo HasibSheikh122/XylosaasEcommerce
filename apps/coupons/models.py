@@ -1,9 +1,11 @@
+from decimal import Decimal
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
-from decimal import Decimal
+from django.utils import timezone
+
 
 class Coupon(models.Model):
-    """Coupon/Discount code model"""
+    """কুপন ও ডিসকাউন্ট মডেল"""
     
     DISCOUNT_TYPES = [
         ('percentage', 'Percentage'),
@@ -26,21 +28,19 @@ class Coupon(models.Model):
         ('specific_products', 'Specific Products'),
     ]
     
-    # Basic info
+    # বেসিক তথ্য
     tenant = models.ForeignKey('tenants.Tenant', on_delete=models.CASCADE)
     code = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     
-    # Discount details
+    # ডিসকাউন্ট কনফিগারেশন
     discount_type = models.CharField(max_length=20, choices=DISCOUNT_TYPES)
     discount_value = models.DecimalField(
         max_digits=10, 
         decimal_places=2,
         validators=[MinValueValidator(0)]
     )
-    
-    # For percentage discount
     max_discount_amount = models.DecimalField(
         max_digits=10, 
         decimal_places=2, 
@@ -48,7 +48,7 @@ class Coupon(models.Model):
         blank=True
     )
     
-    # For buy_x_get_y
+    # Buy X Get Y কনফিগারেশন
     buy_quantity = models.IntegerField(null=True, blank=True)
     get_quantity = models.IntegerField(null=True, blank=True)
     get_discount_percentage = models.DecimalField(
@@ -59,22 +59,22 @@ class Coupon(models.Model):
         validators=[MinValueValidator(0), MaxValueValidator(100)]
     )
     
-    # Apply to
+    # পণ্য ও ক্যাটাগরি সীমাবদ্ধতা
     apply_to = models.CharField(max_length=30, choices=APPLY_TO_CHOICES, default='all_products')
     applicable_categories = models.ManyToManyField('products.Category', blank=True)
     applicable_products = models.ManyToManyField('products.Product', blank=True)
     excluded_products = models.ManyToManyField('products.Product', blank=True, related_name='excluded_coupons')
     
-    # Usage limits
-    usage_limit = models.IntegerField(null=True, blank=True)  # Total uses allowed
-    per_user_limit = models.IntegerField(default=1)  # Uses per customer
+    # ব্যবহার সীমা
+    usage_limit = models.IntegerField(null=True, blank=True)
+    per_user_limit = models.IntegerField(default=1)
     used_count = models.IntegerField(default=0)
     
-    # Time limits
+    # সময়সীমা
     valid_from = models.DateTimeField()
     valid_to = models.DateTimeField()
     
-    # Order limits
+    # অর্ডারের টাকার পরিমাণ সীমা
     minimum_order_amount = models.DecimalField(
         max_digits=10, 
         decimal_places=2, 
@@ -88,24 +88,20 @@ class Coupon(models.Model):
         blank=True
     )
     
-    # Customer limits
+    # গ্রাহক সীমাবদ্ধতা
     new_customers_only = models.BooleanField(default=False)
     first_order_only = models.BooleanField(default=False)
     applicable_customer_segments = models.JSONField(default=list, blank=True)
     
-    # Status
+    # স্ট্যাটাস ও ভিজিবিলিটি
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
-    
-    # Display
     show_on_checkout = models.BooleanField(default=True)
     is_public = models.BooleanField(default=False)
-    
-    # Stacking
     can_combine = models.BooleanField(default=False)
     priority = models.IntegerField(default=0)
     
-    # Metadata
-    created_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True)
+    # মেটাডাটা
+    created_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -120,52 +116,59 @@ class Coupon(models.Model):
     def __str__(self):
         return f"{self.code} - {self.get_discount_type_display()}"
     
-    def is_valid(self, cart_total=None, customer=None):
-        """Check if coupon is valid"""
-        from django.utils import timezone
-        
-        # Check status
+    def is_valid(self, cart_total=None, customer=None, product_ids=None):
+        """কুপন ভ্যালিডেশন লজিক (প্রোডাক্ট লিমিট, কাস্টমার লিমিট ও ফার্স্ট অর্ডার যাচাই)"""
         if self.status != 'active':
-            return False, "Coupon is not active"
+            return False, "কুপনটি সক্রিয় নয়।"
         
-        # Check time
         now = timezone.now()
         if now < self.valid_from:
-            return False, "Coupon not yet valid"
+            return False, "কুপনটির মেয়াদ এখনও শুরু হয়নি।"
         if now > self.valid_to:
-            return False, "Coupon has expired"
+            return False, "কুপনটির মেয়াদ শেষ হয়ে গেছে।"
         
-        # Check usage limit
         if self.usage_limit and self.used_count >= self.usage_limit:
-            return False, "Coupon usage limit reached"
+            return False, "কুপন ব্যবহারের সর্বমোট সীমা শেষ।"
         
-        # Check order amount
-        if cart_total:
+        # ১. নতুন কাস্টমার ও ফার্স্ট অর্ডার ভ্যালিডেশন
+        if customer:
+            if (self.first_order_only or self.new_customers_only) and customer.total_orders > 0:
+                return False, "এই কুপনটি শুধুমাত্র নতুন গ্রাহকদের প্রথম অর্ডারের জন্য প্রযোজ্য।"
+            
+            # প্রতি কাস্টমারের ব্যবহার সীমা (যেমন: ১ বার)
+            if self.per_user_limit > 0:
+                used_count = CouponUsage.objects.filter(coupon=self, customer=customer).count()
+                if used_count >= self.per_user_limit:
+                    return False, "আপনি ইতিমধ্যে এই কুপনটি ব্যবহার করে ফেলেছেন।"
+
+        # ২. মিনিমাম ও ম্যাক্সিমাম অর্ডার ভ্যালু ভ্যালিডেশন
+        if cart_total is not None:
             if self.minimum_order_amount and cart_total < self.minimum_order_amount:
-                return False, f"Minimum order amount of {self.minimum_order_amount} required"
+                return False, f"ন্যূনতম ৳{self.minimum_order_amount:,.0f} টাকার অর্ডারে কুপনটি প্রযোজ্য।"
             if self.maximum_order_amount and cart_total > self.maximum_order_amount:
-                return False, f"Maximum order amount of {self.maximum_order_amount} exceeded"
-        
-        # Check customer
-        if customer and self.first_order_only:
-            if customer.total_orders > 0:
-                return False, "This coupon is for first order only"
-        
-        # Check if customer already used this coupon
-        if customer and self.per_user_limit > 0:
-            used_count = CouponUsage.objects.filter(
-                coupon=self,
-                customer=customer
-            ).count()
-            if used_count >= self.per_user_limit:
-                return False, "You have already used this coupon"
-        
-        return True, "Coupon is valid"
+                return False, f"সর্বোচ্চ ৳{self.maximum_order_amount:,.0f} টাকার অর্ডারে কুপনটি প্রযোজ্য।"
+
+        # ৩. নির্দিষ্ট প্রোডাক্ট সীমাবদ্ধতা ভ্যালিডেশন
+        if product_ids:
+            # এক্সক্লুডেড প্রোডাক্ট চেক
+            excluded_ids = set(self.excluded_products.values_list('id', flat=True))
+            if excluded_ids and all(pid in excluded_ids for pid in product_ids):
+                return False, "আপনার কার্টের পণ্যগুলোর ওপর এই কুপন প্রযোজ্য নয়।"
+
+            # স্পেসিফিক প্রোডাক্ট রুল
+            if self.apply_to == 'specific_products':
+                applicable_ids = set(self.applicable_products.values_list('id', flat=True))
+                if not any(pid in applicable_ids for pid in product_ids):
+                    return False, "নির্বাচিত পণ্যের জন্য কুপনটি প্রযোজ্য নয়।"
+
+        return True, "কুপন কার্যকর।"
     
-    def calculate_discount(self, cart_total, items=None):
-        """Calculate discount amount"""
+    def calculate_discount(self, cart_total, product_ids=None, items=None):
+        """ডিসকাউন্টের পরিমাণ হিসাব"""
+        cart_total = Decimal(str(cart_total))
+
         if self.discount_type == 'percentage':
-            discount = cart_total * (self.discount_value / 100)
+            discount = cart_total * (self.discount_value / Decimal('100.00'))
             if self.max_discount_amount:
                 discount = min(discount, self.max_discount_amount)
             return discount
@@ -174,23 +177,21 @@ class Coupon(models.Model):
             return min(self.discount_value, cart_total)
         
         elif self.discount_type == 'free_shipping':
-            return 0  # Handled separately
+            return Decimal('0.00')
         
         elif self.discount_type == 'buy_x_get_y':
             if items and self.buy_quantity and self.get_quantity:
-                # Calculate discount based on buy x get y logic
                 eligible_items = self._get_eligible_items(items)
                 if eligible_items:
-                    # Sort by price (cheapest free)
                     eligible_items.sort(key=lambda x: x.price)
                     free_items = eligible_items[:self.get_quantity]
                     return sum([item.price for item in free_items])
-            return 0
+            return Decimal('0.00')
         
-        return 0
+        return Decimal('0.00')
     
     def _get_eligible_items(self, items):
-        """Get items eligible for buy_x_get_y"""
+        """Buy X Get Y এর জন্য যোগ্য পণ্য ফিল্টার"""
         if self.apply_to == 'all_products':
             return items
         elif self.apply_to == 'specific_products':
@@ -199,26 +200,23 @@ class Coupon(models.Model):
             return [item for item in items if item.product.category in self.applicable_categories.all()]
         return []
 
+
 class CouponUsage(models.Model):
-    """Track coupon usage"""
+    """কুপন ব্যবহারের হিস্ট্রি মডেল"""
     
-    coupon = models.ForeignKey(Coupon, on_delete=models.CASCADE)
+    coupon = models.ForeignKey(Coupon, on_delete=models.CASCADE, related_name='usages')
     order = models.ForeignKey('orders.Order', on_delete=models.CASCADE)
     customer = models.ForeignKey('customers.Customer', on_delete=models.CASCADE)
     
-    # Discount applied
     discount_amount = models.DecimalField(max_digits=10, decimal_places=2)
     original_amount = models.DecimalField(max_digits=10, decimal_places=2)
     final_amount = models.DecimalField(max_digits=10, decimal_places=2)
     
-    # Status
     is_valid = models.BooleanField(default=True)
     is_refunded = models.BooleanField(default=False)
     
-    # Metadata
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(blank=True)
-    
     used_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -229,8 +227,9 @@ class CouponUsage(models.Model):
     def __str__(self):
         return f"{self.coupon.code} - {self.order.order_number}"
 
+
 class CouponRule(models.Model):
-    """Advanced coupon rules"""
+    """উন্নত কুপন রুলস (দিন, সময়, কাস্টমার গ্রুপ ইত্যাদি)"""
     
     RULE_TYPES = [
         ('day_of_week', 'Day of Week'),
@@ -242,13 +241,10 @@ class CouponRule(models.Model):
     ]
     
     coupon = models.ForeignKey(Coupon, on_delete=models.CASCADE, related_name='rules')
-    
     rule_type = models.CharField(max_length=20, choices=RULE_TYPES)
-    rule_value = models.JSONField()  # Store rule parameters
-    
-    is_required = models.BooleanField(default=True)  # Must meet this rule
+    rule_value = models.JSONField()
+    is_required = models.BooleanField(default=True)
     order = models.IntegerField(default=0)
-    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -259,14 +255,14 @@ class CouponRule(models.Model):
     def __str__(self):
         return f"{self.coupon.code} - {self.get_rule_type_display()}"
 
+
 class CouponCategory(models.Model):
-    """Coupon categories for organization"""
+    """কুপন ক্যাটাগরি মডেল"""
     
     tenant = models.ForeignKey('tenants.Tenant', on_delete=models.CASCADE)
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     color = models.CharField(max_length=7, default='#007bff')
-    
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
