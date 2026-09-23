@@ -16,6 +16,8 @@ from .views import (
     StorefrontHomeView,
     ThemeMarketplaceView,  # 🌟 ইমপোর্ট যোগ করা হয়েছে
     ThemeActionView,       # 🌟 ইমপোর্ট যোগ করা হয়েছে
+    StoreGalleryListCreateView, 
+    StoreGalleryDeleteView,
 )
 
 router = DefaultRouter()
@@ -35,6 +37,9 @@ urlpatterns = [
     path('newsletter/', StoreNewsletterCreateView.as_view(), name='store-newsletter'),
     path('marketplace/themes/', ThemeMarketplaceView.as_view(), name='theme-marketplace'),
     path('marketplace/themes/action/', ThemeActionView.as_view(), name='theme-action'),
+
+    path('gallery/', StoreGalleryListCreateView.as_view(), name='store-gallery-list-create'),
+    path('gallery/<int:pk>/', StoreGalleryDeleteView.as_view(), name='store-gallery-delete'),
     path('', include(router.urls)),
 
 ]

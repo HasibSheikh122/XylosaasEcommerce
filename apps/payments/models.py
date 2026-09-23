@@ -2,8 +2,9 @@ from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from decimal import Decimal
 
+
 class PaymentGateway(models.Model):
-    """Payment gateway configuration"""
+    """Payment gateway configuration (Platform & Tenant level)"""
     
     GATEWAY_TYPES = [
         ('stripe', 'Stripe'),
@@ -14,7 +15,14 @@ class PaymentGateway(models.Model):
         ('rocket', 'Rocket'),
     ]
     
-    tenant = models.ForeignKey('tenants.Tenant', on_delete=models.CASCADE)
+    # প্ল্যাটফর্ম-লেভেল গেটওয়ের জন্য tenant null হতে পারে
+    tenant = models.ForeignKey(
+        'tenants.Tenant', 
+        on_delete=models.CASCADE, 
+        null=True, 
+        blank=True,
+        related_name='payment_gateways'
+    )
     gateway_type = models.CharField(max_length=20, choices=GATEWAY_TYPES)
     
     # Configuration
@@ -53,10 +61,12 @@ class PaymentGateway(models.Model):
         ordering = ['-is_default', 'gateway_type']
     
     def __str__(self):
-        return f"{self.get_gateway_type_display()} - {self.tenant.store_name}"
+        tenant_name = self.tenant.store_name if self.tenant else "Platform SaaS"
+        return f"{self.get_gateway_type_display()} - {tenant_name}"
+
 
 class PaymentTransaction(models.Model):
-    """Payment transaction record"""
+    """Payment transaction record (Supports Store Orders & SaaS Onboarding)"""
     
     STATUS_CHOICES = [
         ('pending', 'Pending'),
@@ -80,11 +90,35 @@ class PaymentTransaction(models.Model):
         ('installment', 'Installment'),
     ]
     
-    # Relationships
-    tenant = models.ForeignKey('tenants.Tenant', on_delete=models.CASCADE)
-    order = models.ForeignKey('orders.Order', on_delete=models.SET_NULL, null=True, blank=True)
-    customer = models.ForeignKey('customers.Customer', on_delete=models.SET_NULL, null=True)
-    gateway = models.ForeignKey(PaymentGateway, on_delete=models.SET_NULL, null=True)
+    # নতুন মার্চেন্ট অনবোর্ডিংয়ের সময় tenant null থাকবে
+    tenant = models.ForeignKey(
+        'tenants.Tenant', 
+        on_delete=models.CASCADE, 
+        null=True, 
+        blank=True,
+        related_name='payment_transactions'
+    )
+    # db_constraint=False ব্যবহার করায় public schema-তে orders/customers টেবিল না থাকলেও ক্র্যাশ করবে না
+    order = models.ForeignKey(
+        'orders.Order', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        db_constraint=False
+    )
+    customer = models.ForeignKey(
+        'customers.Customer', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        db_constraint=False
+    )
+    gateway = models.ForeignKey(
+        PaymentGateway, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True
+    )
     
     # Transaction details
     transaction_id = models.CharField(max_length=255, unique=True)
@@ -100,7 +134,7 @@ class PaymentTransaction(models.Model):
     net_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     
     # Payment info
-    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHODS)
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHODS, default='digital_wallet')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     
     # Gateway response
@@ -108,7 +142,7 @@ class PaymentTransaction(models.Model):
     gateway_response = models.JSONField(default=dict, blank=True)
     gateway_error = models.TextField(blank=True)
     
-    # Customer info
+    # Customer / Merchant info
     customer_name = models.CharField(max_length=255, blank=True)
     customer_email = models.EmailField(blank=True)
     customer_phone = models.CharField(max_length=20, blank=True)
@@ -142,39 +176,52 @@ class PaymentTransaction(models.Model):
     class Meta:
         db_table = 'payments_transaction'
         ordering = ['-initiated_at']
-        indexes = [
-            models.Index(fields=['tenant', 'status']),
-            models.Index(fields=['tenant', 'order']),
-            models.Index(fields=['transaction_id']),
-            models.Index(fields=['gateway_transaction_id']),
-        ]
     
     def __str__(self):
         return f"{self.transaction_id} - {self.amount} {self.currency}"
-    
+
     def get_status_display(self):
         return dict(self.STATUS_CHOICES).get(self.status, self.status)
-    
+
     def is_completed(self):
         return self.status == 'completed'
-    
+
     def is_failed(self):
         return self.status == 'failed'
-    
+
     def is_pending(self):
         return self.status == 'pending'
+
 
 class PaymentSubscription(models.Model):
     """Subscription payment record"""
     
-    tenant = models.ForeignKey('tenants.Tenant', on_delete=models.CASCADE)
-    subscription = models.ForeignKey('subscriptions.Subscription', on_delete=models.CASCADE)
-    transaction = models.ForeignKey(PaymentTransaction, on_delete=models.SET_NULL, null=True)
+    tenant = models.ForeignKey(
+        'tenants.Tenant', 
+        on_delete=models.CASCADE, 
+        null=True, 
+        blank=True,
+        related_name='payment_subscriptions'
+    )
+    subscription = models.ForeignKey(
+        'subscriptions.Subscription', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        db_constraint=False,
+        related_name='payment_subscriptions'
+    )
+    transaction = models.ForeignKey(
+        PaymentTransaction, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True
+    )
     
     # Subscription details
     plan_name = models.CharField(max_length=100)
     plan_price = models.DecimalField(max_digits=10, decimal_places=2)
-    billing_cycle = models.CharField(max_length=20)  # monthly, yearly
+    billing_cycle = models.CharField(max_length=20, default='monthly')
     
     # Payment details
     amount_paid = models.DecimalField(max_digits=10, decimal_places=2)
@@ -195,7 +242,9 @@ class PaymentSubscription(models.Model):
         ordering = ['-payment_date']
     
     def __str__(self):
-        return f"{self.tenant.store_name} - {self.plan_name} - {self.period_start}"
+        tenant_name = self.tenant.store_name if self.tenant else "Pending Store"
+        return f"{tenant_name} - {self.plan_name} - {self.period_start}"
+
 
 class PaymentRefund(models.Model):
     """Refund record"""
@@ -209,7 +258,12 @@ class PaymentRefund(models.Model):
         ('other', 'Other'),
     ]
     
-    tenant = models.ForeignKey('tenants.Tenant', on_delete=models.CASCADE)
+    tenant = models.ForeignKey(
+        'tenants.Tenant', 
+        on_delete=models.CASCADE, 
+        null=True, 
+        blank=True
+    )
     transaction = models.ForeignKey(PaymentTransaction, on_delete=models.CASCADE)
     
     refund_transaction_id = models.CharField(max_length=255, unique=True)
@@ -222,7 +276,12 @@ class PaymentRefund(models.Model):
     
     # Status
     is_approved = models.BooleanField(default=False)
-    approved_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True)
+    approved_by = models.ForeignKey(
+        'users.User', 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True
+    )
     status = models.CharField(max_length=20, default='pending')
     
     # Metadata
@@ -236,6 +295,7 @@ class PaymentRefund(models.Model):
     
     def __str__(self):
         return f"Refund {self.refund_transaction_id} - {self.refund_amount}"
+
 
 class PaymentLog(models.Model):
     """Payment log for debugging"""

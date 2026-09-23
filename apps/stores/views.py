@@ -18,7 +18,8 @@ from .models import (
     StoreFAQ,
     StoreTestimonial,
     StoreNewsletterSubscriber,
-    StoreBlogPost
+    StoreBlogPost,
+    StoreGalleryImage
 )
 from .serializers import (
     StoreSettingsSerializer,
@@ -28,7 +29,8 @@ from .serializers import (
     StoreTestimonialSerializer,
     StoreNewsletterSerializer,
     StoreBlogPostSerializer,
-    StoreNewsletterSubscriberSerializer
+    StoreNewsletterSubscriberSerializer,
+    StoreGalleryImageSerializer
 )
 
 
@@ -771,3 +773,39 @@ class ThemeActionView(APIView):
             return Response({'message': f'"{theme_key}" theme-ti store-e active kora hoyeche!'}, status=status.HTTP_200_OK)
 
         return Response({'detail': 'Sothik action prodan korun.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+
+
+
+
+
+class StoreGalleryListCreateView(generics.ListCreateAPIView):
+    queryset = StoreGalleryImage.objects.all().order_by('-id')
+    serializer_class = StoreGalleryImageSerializer
+    parser_classes = [MultiPartParser, FormParser]
+
+    def get_permissions(self):
+        return [permissions.AllowAny()]
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        # id এবং পূর্ণ image URL অবজেক্ট আকারে পাঠানো হচ্ছে
+        data = [
+            {
+                "id": item.id,
+                "image": request.build_absolute_uri(item.image.url) if item.image else ""
+            }
+            for item in queryset if item.image
+        ]
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class StoreGalleryDeleteView(generics.DestroyAPIView):
+    """
+    DELETE: নির্দিষ্ট আইডি দিয়ে গ্যালারি ছবি মুছে ফেলার এন্ডপয়েন্ট।
+    """
+    queryset = StoreGalleryImage.objects.all()
+    serializer_class = StoreGalleryImageSerializer
+    permission_classes = [permissions.AllowAny]

@@ -7,7 +7,8 @@ from .models import (
     StoreFAQ,
     StoreTestimonial,
     StoreNewsletterSubscriber,
-    StoreBlogPost
+    StoreBlogPost,
+    StoreGalleryImage
 )
 
 class StoreSettingsSerializer(serializers.ModelSerializer):
@@ -161,3 +162,11 @@ class StoreNewsletterSubscriberSerializer(serializers.ModelSerializer):
             if val:
                 return val
         return None
+
+
+
+
+class StoreGalleryImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StoreGalleryImage
+        fields = ['id', 'image']

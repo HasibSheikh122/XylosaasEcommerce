@@ -535,3 +535,11 @@ class TenantPurchasedTheme(models.Model):
 
     def __str__(self):
         return f"{self.tenant} - {self.theme.name}"
+
+from django.db import models
+
+class StoreGalleryImage(models.Model):
+    image = models.ImageField(upload_to="store_gallery/")
+
+    def __str__(self):
+        return f"Gallery Image #{self.id}"

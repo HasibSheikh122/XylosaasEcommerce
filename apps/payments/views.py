@@ -2,6 +2,9 @@ import uuid
 from decimal import Decimal
 from django.utils import timezone
 from django.db import transaction
+from django.shortcuts import redirect
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -20,10 +23,13 @@ from .serializers import (
     PaymentGatewaySerializer,
     PaymentTransactionSerializer,
     InitiatePaymentSerializer,
+    InitiateSubscriptionPaymentSerializer,
+    ManualSubscriptionPaymentSerializer,
     PaymentRefundSerializer,
     PaymentSubscriptionSerializer,
     PaymentLogSerializer,
 )
+from .sslcommerz import SSLCommerzService
 
 
 class BaseTenantPaymentViewSet(viewsets.ModelViewSet):
@@ -44,7 +50,7 @@ class BaseTenantPaymentViewSet(viewsets.ModelViewSet):
 
 
 class PaymentGatewayViewSet(BaseTenantPaymentViewSet):
-    """স্টোরের পেমেন্ট গেটওয়ে কনফিগারেশন (মার্চেন্ট বা অ্যাডমিনের জন্য)"""
+    """স্টোরের পেমেন্ট গেটওয়ে কনফিগারেশন"""
     queryset = PaymentGateway.objects.all()
     serializer_class = PaymentGatewaySerializer
     filter_backends = [DjangoFilterBackend]
@@ -52,14 +58,13 @@ class PaymentGatewayViewSet(BaseTenantPaymentViewSet):
 
     def perform_create(self, serializer):
         tenant = getattr(self.request, 'tenant', None)
-        # নতুন গেটওয়ে ডিফল্ট হলে বাকিগুলোর ডিফল্ট স্ট্যাটাস তুলে নেওয়া
         if serializer.validated_data.get('is_default', False) and tenant:
             PaymentGateway.objects.filter(tenant=tenant).update(is_default=False)
         super().perform_create(serializer)
 
 
 class PaymentTransactionViewSet(BaseTenantPaymentViewSet):
-    """পেমেন্ট লেনদেন পরিচালনা, ইনিশিয়েশন ও গেটওয়ে হ্যান্ডলিং"""
+    """পেমেন্ট লেনদেন পরিচালনা, SSLCommerz অনলাইন ও ম্যানুয়াল TrxID হ্যান্ডলিং"""
     queryset = PaymentTransaction.objects.select_related('order', 'customer', 'gateway').all()
     serializer_class = PaymentTransactionSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -71,16 +76,15 @@ class PaymentTransactionViewSet(BaseTenantPaymentViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         user = self.request.user
-        # সাধারণ কাস্টমার কেবল নিজের লেনদেন দেখতে পারবে
-        if not user.is_staff and hasattr(user, 'customer_profile'):
+        if user.is_authenticated and not user.is_staff and hasattr(user, 'customer_profile'):
             qs = qs.filter(customer=user.customer_profile)
         return qs
 
+    # -------------------------------------------------------------
+    # ১. চেকআউট অর্ডারের পেমেন্ট সেশন শুরু (SSLCommerz)
+    # -------------------------------------------------------------
     @action(detail=False, methods=['post'], url_path='initiate')
     def initiate(self, request):
-        """
-        চেকআউট সম্পন্ন হওয়া কোনো অর্ডারের বিপরীতে অনলাইন পেমেন্ট সেশন শুরু করা
-        """
         serializer = InitiatePaymentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -97,13 +101,19 @@ class PaymentTransactionViewSet(BaseTenantPaymentViewSet):
         if order.payment_status == 'paid':
             return Response({'error': 'এই অর্ডারের মূল্য আগেই পরিশোধ করা হয়েছে।'}, status=status.HTTP_400_BAD_REQUEST)
 
-        gateway = PaymentGateway.objects.filter(tenant=tenant, gateway_type=gateway_type, is_active=True).first()
-        if not gateway:
+        gateway = None
+        try:
+            gateway = PaymentGateway.objects.filter(tenant=tenant, gateway_type=gateway_type, is_active=True).first()
+        except Exception:
+            gateway = None
+
+        if not gateway and gateway_type != 'sslcommerz':
             return Response({'error': f'{gateway_type} গেটওয়ে বর্তমানে নিষ্ক্রিয় বা অনুপলব্ধ।'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # ট্রানজাকশন আইডি ও ফি হিসাব
         tx_id = f"TXN-{uuid.uuid4().hex[:12].upper()}"
-        fee_amount = (order.total * (gateway.transaction_fee_percentage / Decimal('100.00'))) + gateway.transaction_fee_fixed
+        fee_pct = gateway.transaction_fee_percentage if gateway else Decimal('0.00')
+        fee_fixed = gateway.transaction_fee_fixed if gateway else Decimal('0.00')
+        fee_amount = (order.total * (fee_pct / Decimal('100.00'))) + fee_fixed
         net_amount = max(Decimal('0.00'), order.total - fee_amount)
 
         customer = getattr(request.user, 'customer_profile', None) if request.user.is_authenticated else order.customer
@@ -123,26 +133,62 @@ class PaymentTransactionViewSet(BaseTenantPaymentViewSet):
             net_amount=net_amount,
             payment_method=payment_method,
             status='pending',
-            customer_name=order.shipping_address.get('name', ''),
-            customer_email=request.user.email if request.user.is_authenticated else '',
-            customer_phone=order.shipping_address.get('phone', ''),
-            billing_address=order.billing_address,
+            customer_name=order.shipping_address.get('name', 'Customer'),
+            customer_email=request.user.email if request.user.is_authenticated else 'customer@example.com',
+            customer_phone=order.shipping_address.get('phone', '01700000000'),
+            billing_address=order.billing_address or {},
             ip_address=request.META.get('REMOTE_ADDR'),
             user_agent=request.META.get('HTTP_USER_AGENT', '')
         )
 
-        PaymentLog.objects.create(
-            tenant=tenant,
-            transaction=payment_tx,
-            log_type='request',
-            log_data={'action': 'initiate_payment', 'gateway': gateway_type, 'amount': float(order.total)},
-            ip_address=request.META.get('REMOTE_ADDR'),
-            user_agent=request.META.get('HTTP_USER_AGENT', '')
-        )
+        try:
+            PaymentLog.objects.create(
+                tenant=tenant,
+                transaction=payment_tx,
+                log_type='request',
+                log_data={'action': 'initiate_payment', 'gateway': gateway_type, 'amount': float(order.total)},
+                ip_address=request.META.get('REMOTE_ADDR'),
+                user_agent=request.META.get('HTTP_USER_AGENT', '')
+            )
+        except Exception:
+            pass
 
-        # গেটওয়ে রিডাইরেক্ট লিঙ্ক সিমুলেশন
+        if gateway_type == 'sslcommerz':
+            ssl_service = SSLCommerzService(gateway=gateway)
+            base_url = request.build_absolute_uri('/')[:-1]
+
+            session_data = {
+                "amount": order.total,
+                "currency": "BDT",
+                "transaction_id": tx_id,
+                "customer_name": payment_tx.customer_name,
+                "customer_email": payment_tx.customer_email,
+                "customer_phone": payment_tx.customer_phone,
+                "customer_address": order.shipping_address.get('address', 'Dhaka'),
+                "product_name": f"Order #{order.order_number}",
+                "success_url": f"{base_url}/api/v1/payments/transactions/sslcommerz-success/",
+                "fail_url": f"{base_url}/api/v1/payments/transactions/sslcommerz-fail/",
+                "cancel_url": f"{base_url}/api/v1/payments/transactions/sslcommerz-cancel/",
+                "ipn_url": f"{base_url}/api/v1/payments/transactions/webhook/",
+            }
+
+            res = ssl_service.initiate_session(session_data)
+            if res.get("success"):
+                return Response({
+                    'transaction_id': tx_id,
+                    'amount': float(order.total),
+                    'currency': 'BDT',
+                    'gateway': 'sslcommerz',
+                    'redirect_url': res["gateway_url"],
+                    'status': 'pending'
+                }, status=status.HTTP_201_CREATED)
+            else:
+                payment_tx.status = 'failed'
+                payment_tx.gateway_error = res.get("error", "SSLCommerz Error")
+                payment_tx.save()
+                return Response({'error': res.get("error")}, status=status.HTTP_400_BAD_REQUEST)
+
         redirect_url = f"https://payment-gateway.xylosaas.com/pay/{gateway_type}/{tx_id}"
-
         return Response({
             'transaction_id': tx_id,
             'amount': float(order.total),
@@ -152,11 +198,193 @@ class PaymentTransactionViewSet(BaseTenantPaymentViewSet):
             'status': payment_tx.status
         }, status=status.HTTP_201_CREATED)
 
+    # -------------------------------------------------------------
+    # ২. SaaS প্ল্যান অনলাইন পেমেন্ট সেশন শুরু (SSLCommerz)
+    # -------------------------------------------------------------
+    @action(detail=False, methods=['post'], url_path='initiate-subscription', permission_classes=[permissions.AllowAny])
+    def initiate_subscription(self, request):
+        serializer = InitiateSubscriptionPaymentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        plan_name = serializer.validated_data['plan_name']
+        amount = serializer.validated_data['amount']
+        billing_cycle = serializer.validated_data['billing_cycle']
+
+        tx_id = f"SUB-{uuid.uuid4().hex[:10].upper()}"
+        tenant = getattr(request, 'tenant', None)
+        
+        gateway = None
+        try:
+            gateway = PaymentGateway.objects.filter(gateway_type='sslcommerz', is_active=True).first()
+        except Exception:
+            gateway = None
+
+        payment_tx = PaymentTransaction.objects.create(
+            tenant=tenant,
+            gateway=gateway,
+            transaction_id=tx_id,
+            amount=amount,
+            currency='BDT',
+            payment_method='digital_wallet',
+            status='pending',
+            customer_name=serializer.validated_data.get('customer_name', 'Merchant Owner'),
+            customer_email=serializer.validated_data.get('customer_email', 'merchant@example.com'),
+            customer_phone=serializer.validated_data.get('customer_phone', '01700000000'),
+            metadata={'is_subscription': True, 'plan_name': plan_name, 'billing_cycle': billing_cycle},
+            ip_address=request.META.get('REMOTE_ADDR'),
+            user_agent=request.META.get('HTTP_USER_AGENT', '')
+        )
+
+        ssl_service = SSLCommerzService(gateway=gateway)
+        base_url = request.build_absolute_uri('/')[:-1]
+
+        session_data = {
+            "amount": amount,
+            "currency": "BDT",
+            "transaction_id": tx_id,
+            "customer_name": payment_tx.customer_name,
+            "customer_email": payment_tx.customer_email,
+            "customer_phone": payment_tx.customer_phone,
+            "product_name": f"SaaS Plan: {plan_name}",
+            "success_url": f"{base_url}/api/v1/payments/transactions/sslcommerz-success/",
+            "fail_url": f"{base_url}/api/v1/payments/transactions/sslcommerz-fail/",
+            "cancel_url": f"{base_url}/api/v1/payments/transactions/sslcommerz-cancel/",
+            "ipn_url": f"{base_url}/api/v1/payments/transactions/webhook/",
+        }
+
+        res = ssl_service.initiate_session(session_data)
+        if res.get("success"):
+            return Response({
+                "transaction_id": tx_id,
+                "gateway_url": res["gateway_url"]
+            }, status=status.HTTP_200_OK)
+
+        return Response({"error": res.get("error", "SSLCommerz সেশন তৈরিতে সমস্যা হয়েছে।")}, status=status.HTTP_400_BAD_REQUEST)
+
+    # -------------------------------------------------------------
+    # ৩. পূর্বের ম্যানুয়াল TrxID সাবমিশন (Send Money)
+    # -------------------------------------------------------------
+    @action(detail=False, methods=['post'], url_path='manual-subscription', permission_classes=[permissions.AllowAny])
+    def manual_subscription(self, request):
+        serializer = ManualSubscriptionPaymentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        plan_name = serializer.validated_data['plan_name']
+        amount = serializer.validated_data['amount']
+        sender_phone = serializer.validated_data.get('sender_phone', '')
+        trx_id = serializer.validated_data['transaction_id'].strip().upper()
+
+        if PaymentTransaction.objects.filter(transaction_id=trx_id).exists():
+            return Response({'error': 'এই TrxID দিয়ে আগেই পেমেন্ট সাবমিট করা হয়েছে।'}, status=status.HTTP_400_BAD_REQUEST)
+
+        tenant = getattr(request, 'tenant', None)
+
+        PaymentTransaction.objects.create(
+            tenant=tenant,
+            transaction_id=trx_id,
+            amount=amount,
+            currency='BDT',
+            payment_method='mobile_banking',
+            status='pending',
+            customer_phone=sender_phone,
+            metadata={
+                'is_subscription': True,
+                'plan_name': plan_name,
+                'is_manual_send_money': True,
+                'sender_phone': sender_phone
+            },
+            notes=f"Manual Send Money Subscription for {plan_name}. Sender: {sender_phone}",
+            ip_address=request.META.get('REMOTE_ADDR'),
+            user_agent=request.META.get('HTTP_USER_AGENT', '')
+        )
+
+        return Response({
+            'status': 'success',
+            'message': 'পেমেন্ট ভেরিফিকেশনের জন্য সফলভাবে জমা হয়েছে।',
+            'transaction_id': trx_id
+        }, status=status.HTTP_201_CREATED)
+
+    # -------------------------------------------------------------
+    # ৪. SSLCommerz Success Callback (সঠিক পেজে রিডাইরেক্ট ফিক্স)
+    # -------------------------------------------------------------
+    @method_decorator(csrf_exempt)
+    @action(detail=False, methods=['post', 'get'], url_path='sslcommerz-success', permission_classes=[permissions.AllowAny])
+    def sslcommerz_success(self, request):
+        data = request.data if request.method == 'POST' else request.GET
+        tran_id = data.get('tran_id')
+        val_id = data.get('val_id')
+
+        try:
+            tx = PaymentTransaction.objects.get(transaction_id=tran_id)
+        except PaymentTransaction.DoesNotExist:
+            return redirect("https://shop.xylotechsolution.com/?payment=failed&reason=transaction_not_found")
+
+        ssl_service = SSLCommerzService(gateway=tx.gateway)
+        val_result = ssl_service.validate_payment(val_id)
+
+        if val_result.get("valid") and val_result.get("amount") >= tx.amount:
+            with transaction.atomic():
+                tx.status = 'completed'
+                tx.gateway_transaction_id = val_id
+                tx.gateway_response = data
+                tx.completed_at = timezone.now()
+                tx.save()
+
+                if tx.metadata.get('is_subscription'):
+                    plan_name = tx.metadata.get('plan_name')
+                    billing_cycle = tx.metadata.get('billing_cycle', 'monthly')
+
+                    PaymentSubscription.objects.create(
+                        tenant=tx.tenant,
+                        transaction=tx,
+                        plan_name=plan_name,
+                        plan_price=tx.amount,
+                        billing_cycle=billing_cycle,
+                        amount_paid=tx.amount,
+                        period_start=timezone.now(),
+                        period_end=timezone.now() + timezone.timedelta(days=30),
+                        status='active'
+                    )
+                    # 🌟 ফিক্স: মূল পেজ /?status=success-এ রিডাইরেক্ট করা হচ্ছে (যাতে সরাসরি ৩ নম্বর ধাপ ওপেন হয়)
+                    return redirect(f"https://shop.xylotechsolution.com/?status=success&tran_id={tran_id}")
+
+                if tx.order:
+                    tx.order.payment_status = 'paid'
+                    tx.order.status = 'processing'
+                    tx.order.payment_id = val_id
+                    tx.order.save(update_fields=['payment_status', 'status', 'payment_id'])
+
+                return redirect(f"/checkout/success?order_number={tx.order_number}&tran_id={tran_id}")
+        else:
+            tx.status = 'failed'
+            tx.gateway_error = val_result.get("error", "Validation failed")
+            tx.save()
+            return redirect(f"https://shop.xylotechsolution.com/?payment=failed&tran_id={tran_id}")
+
+    # -------------------------------------------------------------
+    # ৫. SSLCommerz Fail & Cancel Callbacks
+    # -------------------------------------------------------------
+    @method_decorator(csrf_exempt)
+    @action(detail=False, methods=['post', 'get'], url_path='sslcommerz-fail', permission_classes=[permissions.AllowAny])
+    def sslcommerz_fail(self, request):
+        tran_id = request.data.get('tran_id') or request.GET.get('tran_id')
+        if tran_id:
+            PaymentTransaction.objects.filter(transaction_id=tran_id).update(status='failed', failed_at=timezone.now())
+        return redirect(f"https://shop.xylotechsolution.com/?payment=failed&tran_id={tran_id}")
+
+    @method_decorator(csrf_exempt)
+    @action(detail=False, methods=['post', 'get'], url_path='sslcommerz-cancel', permission_classes=[permissions.AllowAny])
+    def sslcommerz_cancel(self, request):
+        tran_id = request.data.get('tran_id') or request.GET.get('tran_id')
+        if tran_id:
+            PaymentTransaction.objects.filter(transaction_id=tran_id).update(status='cancelled')
+        return redirect(f"https://shop.xylotechsolution.com/?payment=cancelled")
+
+    # -------------------------------------------------------------
+    # ৬. IPN / Webhook Listener (select_for_update ফিক্স)
+    # -------------------------------------------------------------
     @action(detail=False, methods=['post'], url_path='webhook', permission_classes=[permissions.AllowAny])
     def webhook(self, request):
-        """
-        পেমেন্ট গেটওয়ে (SSLCommerz, bKash, Stripe ইত্যাদি) থেকে আসা আইপিএন/ওয়েবহুক লিসেনার
-        """
         payload = request.data
         tx_id = payload.get('transaction_id') or payload.get('tran_id')
         gateway_status = payload.get('status', '').upper()
@@ -165,20 +393,24 @@ class PaymentTransactionViewSet(BaseTenantPaymentViewSet):
         if not tx_id:
             return Response({'error': 'Transaction identifier missing'}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            tx = PaymentTransaction.objects.select_for_update().get(transaction_id=tx_id)
-        except PaymentTransaction.DoesNotExist:
-            return Response({'error': 'Transaction not found'}, status=status.HTTP_404_NOT_FOUND)
-
+        # 🌟 ফিক্স: select_for_update-কে transaction.atomic()-এর ভেতরে আনা হয়েছে
         with transaction.atomic():
-            PaymentLog.objects.create(
-                tenant=tx.tenant,
-                transaction=tx,
-                log_type='webhook',
-                log_data=payload,
-                ip_address=request.META.get('REMOTE_ADDR'),
-                user_agent=request.META.get('HTTP_USER_AGENT', '')
-            )
+            try:
+                tx = PaymentTransaction.objects.select_for_update().get(transaction_id=tx_id)
+            except PaymentTransaction.DoesNotExist:
+                return Response({'error': 'Transaction not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            try:
+                PaymentLog.objects.create(
+                    tenant=tx.tenant,
+                    transaction=tx,
+                    log_type='webhook',
+                    log_data=payload,
+                    ip_address=request.META.get('REMOTE_ADDR'),
+                    user_agent=request.META.get('HTTP_USER_AGENT', '')
+                )
+            except Exception:
+                pass
 
             if gateway_status in ['COMPLETED', 'VALID', 'SUCCESS', 'PAID']:
                 tx.status = 'completed'
@@ -227,7 +459,6 @@ class PaymentRefundViewSet(BaseTenantPaymentViewSet):
 
     @action(detail=True, methods=['post'], url_path='approve')
     def approve(self, request, pk=None):
-        """অ্যাডমিন কর্তৃক রিফান্ড অনুমোদন এবং ট্রানজাকশন হিস্ট্রি সিঙ্ক"""
         refund = self.get_object()
         if refund.is_approved:
             return Response({'error': 'এই রিফান্ডটি আগেই অনুমোদিত হয়েছে।'}, status=status.HTTP_400_BAD_REQUEST)

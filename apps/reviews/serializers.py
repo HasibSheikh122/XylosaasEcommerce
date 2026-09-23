@@ -10,12 +10,19 @@ class ReviewPhotoSerializer(serializers.ModelSerializer):
 
 
 class ReviewReplySerializer(serializers.ModelSerializer):
-    user_name = serializers.CharField(source='user.get_full_name', read_only=True)
+    user_name = serializers.SerializerMethodField()
 
     class Meta:
         model = ReviewReply
         fields = ['id', 'review', 'user', 'user_name', 'content', 'is_owner_reply', 'attachments', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'user', 'is_owner_reply', 'created_at', 'updated_at']
+
+    def get_user_name(self, obj):
+        if obj.is_owner_reply:
+            return "Store Owner"
+        if obj.user:
+            return obj.user.get_full_name() or obj.user.username or "Customer"
+        return "Customer"
 
 
 class ReviewSerializer(serializers.ModelSerializer):

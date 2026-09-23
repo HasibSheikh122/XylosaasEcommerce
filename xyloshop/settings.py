@@ -50,6 +50,7 @@ SHARED_APPS = [
     'django_celery_beat',
     
     'apps.subscriptions',
+    'apps.payments',
 ]
 
 TENANT_APPS = [
@@ -323,3 +324,12 @@ CHANNEL_LAYERS = {
         "BACKEND": "channels.layers.InMemoryChannelLayer"
     }
 }
+
+
+
+# ==============================================================================
+# SSLCommerz Payment Gateway Configuration
+# ==============================================================================
+SSLCOMMERZ_STORE_ID = os.getenv('SSLCOMMERZ_STORE_ID', 'testbox')
+SSLCOMMERZ_STORE_PASS = os.getenv('SSLCOMMERZ_STORE_PASS', 'qwerty')
+SSLCOMMERZ_IS_SANDBOX = os.getenv('SSLCOMMERZ_IS_SANDBOX', 'True') == 'True'

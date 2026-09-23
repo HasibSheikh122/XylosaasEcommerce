@@ -52,10 +52,28 @@ class PaymentTransactionSerializer(serializers.ModelSerializer):
 
 
 class InitiatePaymentSerializer(serializers.Serializer):
-    """চেকআউট অর্ডারের বিপরীতে পেমেন্ট গেটওয়ে শুরু করার ইনপুট ভ্যালিডেশন"""
+    """চেকআউট অর্ডারের বিপরীতে সাধারণ কাস্টমার পেমেন্ট শুরু করার ইনপুট ভ্যালিডেশন"""
     order_id = serializers.IntegerField(required=True)
     gateway_type = serializers.ChoiceField(choices=PaymentGateway.GATEWAY_TYPES, required=True)
-    payment_method = serializers.ChoiceField(choices=PaymentTransaction.PAYMENT_METHODS, default='mobile_banking')
+    payment_method = serializers.ChoiceField(choices=PaymentTransaction.PAYMENT_METHODS, default='digital_wallet')
+
+
+class InitiateSubscriptionPaymentSerializer(serializers.Serializer):
+    """SaaS সাবস্ক্রিপশন (Growth Spark ইত্যাদি) অনলাইন গেটওয়ে শুরু করার ভ্যালিডেশন"""
+    plan_name = serializers.CharField(max_length=100)
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    billing_cycle = serializers.ChoiceField(choices=['monthly', 'yearly'], default='monthly')
+    customer_name = serializers.CharField(max_length=200, required=False, default="Merchant Owner")
+    customer_email = serializers.EmailField(required=False, default="merchant@example.com")
+    customer_phone = serializers.CharField(max_length=20, required=False, default="01700000000")
+
+
+class ManualSubscriptionPaymentSerializer(serializers.Serializer):
+    """মার্চেন্টের দেওয়া ম্যানুয়াল Send Money TrxID ভ্যালিডেশন"""
+    plan_name = serializers.CharField(max_length=100, default='Growth Spark')
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, default=1500)
+    sender_phone = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    transaction_id = serializers.CharField(max_length=100, required=True)
 
 
 class PaymentRefundSerializer(serializers.ModelSerializer):
